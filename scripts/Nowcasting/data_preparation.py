@@ -12,9 +12,9 @@ warnings.filterwarnings("ignore")
 # some metadata for data peparation
 fourier = True
 nan_threshold = 0.10
-use_sheath = False
+use_sheath = True
 time_series_plot = False
-hours_features = 4
+hours_features = 0
 sw_data_saved = True
 
 # ------------------ Helper Functions ------------------
@@ -487,10 +487,8 @@ if __name__ == "__main__":
 
     # save the data as a csv file
     if use_sheath == False and hours_features == 4:
-        CME_data.write_csv("../../Data/feature_space/CME_features_MC_4.csv")
+        CME_data.write_csv("../../Data/feature_space/CME_features_MO_4.csv")
     elif use_sheath == True and hours_features == 4:
-        CME_data.write_csv("../../Data/feature_space/CME_features_sheath_and_MC_4.csv")
+        CME_data.write_csv("../../Data/feature_space/CME_features_sheath_and_MO_4.csv")
     elif use_sheath == True and hours_features == 0:
         CME_data.write_csv("../../Data/feature_space/CME_features_sheath.csv")
-
-    print(CME_data)
