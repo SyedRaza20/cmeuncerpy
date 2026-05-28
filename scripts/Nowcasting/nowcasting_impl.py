@@ -2,24 +2,21 @@
 import polars as pl
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-import seaborn as sns
 import numpy as np
-import torch
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 import matplotlib.pyplot as plt
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.svm import SVR
 from scipy.stats import norm
-from sklearn.linear_model import Lasso, Ridge, ElasticNet, LinearRegression
-from sklearn.model_selection import cross_val_score
 import scipy
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler
 import warnings
 from cmeuncerpy.models.LinearRegression import LinearRegression
-import sys
 from tqdm import tqdm
 import time
+import argparse
+import sys
 
 warnings.filterwarnings('ignore')
 
@@ -27,15 +24,36 @@ warnings.filterwarnings('ignore')
 # Settings
 # ----------------------------
 
-statistics_figure = True 
-bt_solution = True # False for bz_solution
-experiment = 1 # getting the experiment 
-if experiment == 0:
+statistics_figure = True
+parser = argparse.ArgumentParser(description="for the (1) experiment (1, 2, or 3) and (2) target (Bt or Bz)")
+
+# add the arguments that I need 
+parser.add_argument("experiment", type=int, help="The experiment number")
+parser.add_argument("target", type=str, help="The magnetic field target")
+parser.add_argument("file_name", type=str, help="file name to store the results")
+
+# parse the arguments 
+args = parser.parse_args()
+
+# access the arguments usign dot notation
+print(f"The experiment that will be run is: {args.experiment}")
+print(f"The target that will be predicted is: {args.target}")
+
+if args.target.lower().strip() == "bt":
+    bt_solution = True 
+elif args.target.lower().strip() == "bz":
+    bt_solution = False
+else:
+    raise TypeError("The target value must be bt or bz.")
+
+if args.experiment == 1:
     file = "CME_features_sheath.csv"
-elif experiment == 1:
+elif args.experiment == 2:
     file = "CME_features_sheath_and_MO_4.csv"
-elif experiment == 2:
+elif args.experiment == 3:
     file = "CME_features_MO_4.csv"
+else:
+    raise TypeError("Experiment must be an int with types 1, 2, 3.")
 
 N_SEEDS = 15
 
@@ -226,7 +244,7 @@ if __name__ == "__main__":
         # ----------------------------
 
         # make the object
-        gbm = GradientBoostingRegressor(n_estimators=100, learning_rate=0.1, max_depth=5)
+        gbm = GradientBoostingRegressor(n_estimators=200, learning_rate=0.1, max_depth=3)
         gbm.fit(X_train, y_train)
         y_pred_gbm = gbm.predict(X_test)
 
@@ -246,7 +264,8 @@ if __name__ == "__main__":
         # ----------------------------
 
         # make the object
-        rfr = RandomForestRegressor(n_estimators=100, random_state=seed)
+        seed_rfr = 42
+        rfr = RandomForestRegressor(n_estimators=300, random_state=seed_rfr, max_depth=5)
         rfr.fit(X_train, y_train)
         y_pred_rfr = rfr.predict(X_test)
 
@@ -307,11 +326,17 @@ if __name__ == "__main__":
         # the tqdm stuff
         time.sleep(0.01)
     
-    # making print statements using the dictionary
     print("Model,Metric,Mean,Std")
 
-    for model_name, model_metrics in metrics.items():
-        for metric_name, values in model_metrics.items():
-            mean_val = np.mean(values)
-            std_val = np.std(values)
-            print(f"{model_name},{metric_name},{mean_val:.4f},{std_val:.4f}")
+    with open(f"figures_and_metrics/{args.file_name}", 'w') as f:
+        f.write("Model,Metric,Mean,Std\n")
+        for model_name, model_metrics in metrics.items():
+            for metric_name, values in model_metrics.items():
+                mean_val = np.mean(values)
+                std_val = np.std(values)
+                line = f"{model_name},{metric_name},{mean_val:.4f},{std_val:.4f}"
+                print(line)
+                f.write(line + "\n")
+
+    print(f"The metrics calculated for experiment {args.experiment}, and target {args.target} for all the models are saved in the file")
+    print(f"{args.file_name}")

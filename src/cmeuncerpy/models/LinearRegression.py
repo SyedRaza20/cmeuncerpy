@@ -25,7 +25,8 @@ class LinearRegression:
     """
 
     def __init__(self, no_features: int, learning_rate: float, 
-                max_epochs: int, tolerance: float = 1e-6):
+                max_epochs: int, tolerance: float = 1e-6, 
+                print_converge: str = False):
         """
         The constructor function for LinearRegression Class
 
@@ -41,6 +42,7 @@ class LinearRegression:
         self.learning_rate = learning_rate
         self.max_epochs = max_epochs
         self.tolerance = tolerance
+        self.print_converge = print_converge
 
         # more class variables: related to data splitting 
         self.nsamples = None
@@ -120,7 +122,8 @@ class LinearRegression:
 
             # convergence check
             if abs(prev_loss - current_loss) < self.tolerance:
-                print(f"Converged after {epoch + 1} epochs")
+                if self.print_converge == True:            
+                    print(f"Converged after {epoch + 1} epochs")
                 break
 
             prev_loss = current_loss
