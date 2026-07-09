@@ -224,7 +224,7 @@ def time_series_CME_plot(icme_start: pl.Datetime, mo_start: pl.Datetime, mo_end:
         plt.legend(fontsize=14)
 
     plt.tight_layout(h_pad=3.0)
-    plt.savefig(f"figures/time_series_CME_{cme_id}.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"figures_and_metrics/time_series_CME_{cme_id}.png", dpi=300, bbox_inches='tight')
     plt.show()
 
 def load_SW_from_pickle(sc: str):
@@ -353,6 +353,9 @@ if __name__ == "__main__":
 
         print("The SW data is saved")
 
+    # a checkpoint
+    # sys.exit()
+
     # ------------------ Data Preprocessing ------------------
 
     print("Data preprocessing: ")
@@ -380,11 +383,13 @@ if __name__ == "__main__":
         "WIND": wind_data,
     }
 
+    # checkpoint
+    # sys.exit()
     # ------------------ Time Series Plot ------------------
 
     if time_series_plot == True:
-        # cme number -- pick any number, its just for the picture
-        num = 500
+        # cme number - pick any number, its just for the picture
+        num = 23
 
         cme_id = CME_data[num, "icmecat_id"]
         sc = CME_data[num, "sc_insitu"].strip().upper()
@@ -395,15 +400,13 @@ if __name__ == "__main__":
         first_insitu_data = insitu_data_map.get(sc)
         time_series_CME_plot(icme_start, mo_start, mo_end, first_insitu_data, cme_id)
 
+    # checkpoint
+    # sys.exit()
+
     # ------------------ Feature Generation ------------------
 
     params = ["bx", "by", "bz", "bt", "vt", "np", "tp"]
     feature_list = []
-
-    N_raw = CME_data.height
-
-    params = ['bx', 'by', 'bz', 'bt', 'vt', 'np', 'tp']             # parameters under scrutiny for feature extraction
-    feature_list = []          # list to hold all the features
 
     N_raw = CME_data.height
 
@@ -455,6 +458,11 @@ if __name__ == "__main__":
     CME_data = CME_data.join(feature_list, on="icmecat_id", how="left")
     CME_data = CME_data.drop_nans()
 
+    print(CME_data)
+
+    # checkpoint
+    # sys.exit()
+
     # ------------------ Target Generation ------------------
 
     # in the CME_data, also put the bz/bt targets as the max/min of the entire MO duration
@@ -482,6 +490,9 @@ if __name__ == "__main__":
         pl.Series("bt_target", bt_targets),
         pl.Series("bz_target", bz_targets)
     ])
+
+    # checkpoint
+    # sys.exit()
 
     # ------------------ Save Feature Space ------------------
 
