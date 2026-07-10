@@ -1,0 +1,133 @@
+mhdam.problem = helioRealBC 
+mhdam.subproblem = 105
+mhdam.gamma = 1.5
+mhdam.verbosity = -1
+mhdam.max_step = 40000000
+mhdam.max_time = 100.0 
+#mhdam.max_time = 0.385938432 # 25.38 days
+mhdam.fluids = 1
+mhdam.lismN = 0.09
+mhdam.lismV = 2540000.0
+mhdam.lismT = 7500.0
+mhdam.lismB = 0.000003
+mhdam.lismBX =  0.725264295559877
+mhdam.lismBY = -0.455132615497596
+mhdam.lismBZ =  0.516571392916920
+mhdam.lismUX = -0.996115883836009
+mhdam.lismUY = 0
+mhdam.lismUZ = -0.0880519505777939
+mhdam.netN = 0.025
+mhdam.sunN = 7.4
+mhdam.sunV = 45000000.0
+mhdam.sunT = 51100.0
+mhdam.sunB = 0.000028
+mhdam.sunTILT = 10.0
+mhdam.initR = 180.0
+mhdam.const_H = 1
+# number of tracking surfaces using a level set method
+mhdam.num_tracking_surfaces = -1
+mhdam.coord_sys  = 5
+# determines directions for which geom info should be read
+mhdam.geom_dirs  = 0 0 1
+mhdam.domain_length = 0.1 0 0 1.5 6.283185307179586476925286766559 3.1415926535897932384626433832795
+mhdam.num_cells =   160 256 128
+mhdam.is_periodic = 0 1 0
+mhdam.max_level = 0
+mhdam.ref_ratio = 2 4 2 2 2 2 2 2 2 2
+mhdam.Rspacing = 2
+mhdam.Rexpalpha = 1
+mhdam.regrid_interval = -1 -1 -1 -1 -1 -1 -1
+mhdam.tag_buffer_size = 2
+mhdam.refine_density_thresh = -0.20
+mhdam.refine_B_thresh = -0.2
+# Blocking factor. For each box B in the grids, this is the number Nref
+# for which it is guaranteed to be true that refine(coarsen(B;Nref);Nref) == B.
+# Default = 1. Note that this will also be the minimum possible box size.
+mhdam.block_factor = 2
+# Maximum length of a grid in any dimension. An input value of 0
+# means the maximum value will be infinity (no limit).
+mhdam.max_grid_size = 16
+# Overall grid efficiency to be generated. If this number is set
+# low, the grids will tend to be larger and less filled with tags. If this number
+# is set high, the grids will tend to be smaller and more filled with tags. This
+# controls the aggressiveness of agglomeration by box merging.
+mhdam.fill_ratio = 0.95
+# Proper nesting buffer size. This will be the minimum number
+# of level l cells between any level l+1 cell and a level l-1 cell. Default = 1.
+mhdam.grid_buffer_size = 1
+mhdam.use_artificial_viscosity = 0
+mhdam.artificial_viscosity = 0.0
+mhdam.char_reconstruction = 1
+mhdam.check_tvd = 1
+mhdam.limiter_RHO = 4
+mhdam.limiter_VX = 4
+mhdam.limiter_VY = 4
+mhdam.limiter_VZ = 4
+mhdam.limiter_P = 4
+mhdam.limiter_BX = 4
+mhdam.limiter_BY = 4
+mhdam.limiter_BZ = 4
+mhdam.limiter_LS = 4
+mhdam.time_approximation = 1
+mhdam.8wave_use = 1
+mhdam.flux = 1
+mhdam.entropy_fix_coeff = 0.3
+# Keep only last 'max_chk_files' checkpoint, -1 keep all checkpoints
+mhdam.max_chk_files = 3
+mhdam.chk_map_files = 3
+mhdam.checkpoint_interval = 200000
+mhdam.plot_interval = 200000
+mhdam.plot_prefix  = Data19_.
+mhdam.chk_prefix  = Checkpoint19_.
+mhdam.slice_interval = 5000
+mhdam.slices = 1
+mhdam.slice_planes = Z
+mhdam.slice_values = 1.5707963267
+mhdam.num_probes = 3
+mhdam.probe_dt   = 1 # time step in hours
+probe0.type = 2
+probe0.filename = Earth_Ensemble_19.dat
+probe0.coords   = ../trajEarth.dat
+probe1.type = 2
+probe1.filename = STA_Ensemble_19.dat
+probe1.coords   = ../trajStereoA.dat
+probe2.type = 2
+probe2.filename = STB_Ensemble_19.dat
+probe2.coords   = ../trajStereoB.dat
+mhdam.cfl = 0.3
+mhdam.initial_cfl = 0.1
+mhdam.max_dt_growth = 1.05
+mhdam.dt_tolerance_factor = 1.05
+mhdam.fixed_dt = 1.08912e-06
+mhdam.CMEType = 3
+mhdam.CMETiltTheta = 12.30 ## Latitude
+mhdam.CMETiltPhi = 383.71  ## Longitude
+mhdam.CMETiltARNeutralLine = 30.00 ## Tilt
+mhdam.r0 = 16.56
+mhdam.r1 = 53.44
+mhdam.a = 0.0  ## stretching in type 1, shift in type 2
+mhdam.a1 =    0.00014
+mhdam.CMESpeed = 349.03
+mhdam.CMEpolFluxMultiplier =   69.74523   ## Factor to multiply GL poloidal flux with
+mhdam.CMEenergyMultiplier = 1.0   ## This factor increases the enegy introduced and can control the speed
+mhdam.CMEhelicitySign = 1.0 ## Must be +- 1.0
+mhdam.CMEMass = 2.77e-24   ##in 10^15 g   In case of Vandas CME, it should be density
+mhdam.CMEEnterTime =  2013.49786355276501
+mhdam.CMEHalfAngle = 21.30
+mhdam.CMEFRiED_n =  0.17
+mhdam.CMEVandas_R0 = 17.62
+mhdam.makeStereoAJmap = 1
+mhdam.makeStereoBJmap = 1
+mhdam.JmapCadence = 500 ## Iterations
+mhdam.Earthtraj = ../trajEarth.dat
+mhdam.StereoAtraj = ../trajStereoA.dat
+mhdam.StereoBtraj = ../trajStereoB.dat
+mhdam.StereoAJmap = StereoA-Jmap_19.dat
+mhdam.StereoBJmap = StereoB-Jmap_19.dat
+# any hdf5 file that contains "geometry" group written CSHandler
+mhdam.geom_file  = ../AGONG_WSA_R000_201306200200_201307050200.h5
+mhdam.h5input = ../AGONG_WSA_R000_201306200200_201307050200.h5
+mhdam.startBC = 0.0
+mhdam.startBCPhys = 2013.46598173515981735159817351598174 # 06/20/2013 (DOY 171) 02:00 UT
+mhdam.restart_file = ../WSA_H5.chk.99676.3d.hdf5
+#mhdam.output_vec_cs = 1
