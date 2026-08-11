@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 warnings.filterwarnings("ignore")
 
 # some metadata for data peparation
-fourier = True
+fourier = False
 nan_threshold = 0.10
 use_sheath = True
 time_series_plot = False

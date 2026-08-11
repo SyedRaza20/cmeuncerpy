@@ -12,5 +12,8 @@ wheels/
 # the target directory 
 target/
 
-# the enitre data folder
+# the entire data folder
 Data/
+
+# the .DS_Store files
+.DS_Store
