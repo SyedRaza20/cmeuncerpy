@@ -21,9 +21,8 @@ pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 which_craft = "AB" # this can be A, B, or AB
 
 address = "../../../Data/ImprovingCMEs2/"
-what_order = "linear"
 
-minutes = 60                    # how many last minutes to use
+minutes = 90                    # how many last minutes to use
 ################################################################################
 # HELPER FUNCTIONS
 ################################################################################
@@ -40,30 +39,29 @@ def read_time_from_file(filename):
 ################################################################################
 # the main code 
 
- # the out data frame
+# the out data frame
 df_out = pl.DataFrame(schema = {"CME_num": pl.String, 
                         "Actual_TT": pl.Float64, 
                         "Seed_TT": pl.Float64, 
-                        "ML_TT": pl.Float64, 
+                        "ML_TT_mean": pl.Float64, 
+                        "ML_TT_std": pl.Float64,
                         "Seed_error": pl.Float64, 
-                        "ML_error": pl.Float64})
+                        "ML_error_mean": pl.Float64,
+                        "ML_error_std": pl.Float64})
 
 cmes = ['01_2010-04-03', '02_2010-05-23', '03_2010-08-01', '04_2011-09-06', 
         '05_2011-09-13', '06_2011-10-22', '07_2012-01-19', '08_2012-03-07', 
         '09_2012-06-14', '10_2012-07-03', '11_2012-07-12' , '12_2012-09-27', 
         '13_2012-10-05']
 
-# read in the observed linear fit
-obs_linear_A_fit = pl.read_csv(address + 'training_data/obs_coefficients_' + what_order + '_A_v2.txt')
-obs_linear_B_fit = pl.read_csv(address + 'training_data/obs_coefficients_' + what_order + '_B_v2.txt')
-
-# reset/create all output files ONCE per run, before any processing
-for i in range(minutes + 1):
-    outfile = f"ML_Linear_results_{which_craft}_{i}.txt"
-    with open(outfile, 'w') as f:
-        f.write('CME_num,Actual_TT,Seed_TT,ML_TT,Seed_error,ML_error\n')
+# making the file for storage
+outfile = f"ML_diff_results_{which_craft}.csv"
+with open(outfile, 'w') as f:
+    f.write('CME_num,Actual_TT,Seed_TT,ML_TT_mean,ML_TT_std,Seed_error,ML_error_mean,ML_error_std\n')
 
 for cme in cmes:
+    ML_uncertainty = {"ML_TT" : [], "ML_error": []}
+
     # get the cme eruption time
     erupt_file = address + "erupt_and_arrival_times/" + cme + "/Erupt_time.txt"
     erupt_time = read_time_from_file(erupt_file)
@@ -91,7 +89,7 @@ for cme in cmes:
     # also grab the seed travel time here. look for the travel_time columnm of ensemble member 11
     seed_travel_time = data_A.filter(pl.col("ensemble_member") == 11).select(pl.col("Travel_time")).item(0, 0)
     
-    # grab the last minutes of data for both A and B
+    # grab the last minutes (global variable that you can change) of data for both A and B
     data_A = data_A.filter(
         pl.col("Time") >= (pl.col("Time").max() - pl.duration(minutes = minutes))
     ).sort("Time")
@@ -105,8 +103,6 @@ for cme in cmes:
     unique_times_B = data_B["Time"].unique(maintain_order = True).to_list()
 
     for i in range(minutes + 1):
-        outfile = f"ML_Linear_results_{which_craft}_{i}.txt"
-
         # pick the data frame A at the smallest
         data_filtered_A = data_A.filter(
             pl.col("Time") == unique_times_A[i]
@@ -145,12 +141,24 @@ for cme in cmes:
         # calculate the errors for analysis later
         seed_error = cme_obs_travel_time - seed_travel_time
         ML_error = cme_obs_travel_time - prediction
+        ML_uncertainty["ML_TT"].append(prediction)
+        ML_uncertainty["ML_error"].append(ML_error)
 
-        # make the new row and concatenate with df_out
-        new_inference = pl.DataFrame([{"CME_num": cme, "Actual_TT": cme_obs_travel_time, "Seed_TT": seed_travel_time, "ML_TT": prediction, "Seed_error": seed_error, "ML_error": ML_error}])
+    # make the new row and concatenate with df_out
+    new_inference = pl.DataFrame([{"CME_num": cme, "Actual_TT": cme_obs_travel_time, "Seed_TT": seed_travel_time, "ML_TT_mean": np.mean(ML_uncertainty["ML_TT"]), "ML_TT_std": np.std(ML_uncertainty["ML_TT"]), "Seed_error": seed_error, "ML_error_mean": np.mean(ML_uncertainty["ML_error"]), "ML_error_std": np.std(ML_uncertainty["ML_error"])}])
 
-        df_out = pl.concat([df_out, new_inference])
+    df_out = pl.concat([df_out, new_inference])
 
-        with open(outfile, 'a') as f:
-            f.write(f"{cme},{cme_obs_travel_time:.2f},{seed_travel_time:.2f},"
-                    f"{prediction:.2f},{seed_error:.2f},{ML_error:.2f}\n")
+    with open(outfile, 'a') as f:
+        f.write(f"{cme},{cme_obs_travel_time:.2f},{seed_travel_time:.2f},{np.mean(ML_uncertainty["ML_TT"]):.2f},"
+            f"{np.std(ML_uncertainty["ML_TT"]):.2f},{seed_error:.2f},{np.mean(ML_uncertainty["ML_error"]):.2f},{np.std(ML_uncertainty["ML_error"]):.2f}\n")
+        
+
+# after this is done, you can derive statistics (me, mae, and std) from the written file :)
+results = pl.read_csv(outfile)
+print("ML MAE = ", results["ML_error_mean"].abs().mean())
+print("ML ME = ", results["ML_error_mean"].mean())
+print("ML STD = ", results["ML_error_mean"].std())
+print("Seed MAE = ", results["Seed_error"].abs().mean())
+print("Seed ME = ", results["Seed_error"].mean())
+print("Seed STD = ", results["Seed_error"].std())
