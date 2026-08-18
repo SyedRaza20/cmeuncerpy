@@ -112,29 +112,38 @@ for cme in cmes:
         )
 
         # now do the ML here
-        X = pl.concat(
-            [data_filtered_A[["EA_diff_A"]], data_filtered_B[["EA_diff_B"]]],
-            how = "horizontal"
-        )
+        if which_craft == "AB":
+            X = pl.concat(
+                [data_filtered_A[["EA_diff_A"]], data_filtered_B[["EA_diff_B"]]],
+                how = "horizontal"
+            )
+
+        elif which_craft == "A":
+            X = data_filtered_A[["EA_diff_A"]]
 
         y = data_filtered_A[["Travel_time"]]
         y = y.to_numpy().ravel()
 
         # make the ML model
-        # model = linear_model.LassoLarsCV(cv = 2)
+        model = linear_model.LassoLarsCV(cv = 2)
         # model = linear_model.RidgeCV(alphas = [0.1, 1.0, 10.0])
         # model = linear_model.ElasticNet(alpha=0.01, l1_ratio=0.5) 
         # model = linear_model.Lasso(alpha=0.01)
         # model = linear_model.BayesianRidge()
-        model = linear_model.RANSACRegressor()
+        # model = linear_model.RANSACRegressor()
         # model = linear_model.TheilSenRegressor()
 
         # train the model
         model.fit(X, y)
 
         # now to inference - pass them in as ['EA_diff_A', 'EA_diff_B']
-        X_inference = pl.DataFrame([[0.0], [0.0]],
-            schema = ['EA_diff_A', 'EA_diff_B'])
+        if which_craft == "AB":
+            X_inference = pl.DataFrame([[0.0], [0.0]],
+                schema = ['EA_diff_A', 'EA_diff_B'])
+            
+        elif which_craft == "A":
+            X_inference = pl.DataFrame([[0.0]],
+                schema = ["EA_diff_A"])
 
         prediction = model.predict(X_inference)[0] # to have it as a float because model.predict() returns an array
 
