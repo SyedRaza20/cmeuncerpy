@@ -1,2 +1,2 @@
 CME_num,Actual_TT,Seed_TT,ML_TT_mean,ML_TT_std,Seed_error,ML_error_mean,ML_error_std
-01_2010-04-03,45.62,55.75,51.70,0.00,-10.13,-6.09,0.00
+01_2010-04-03,45.62,55.75,51.17,0.26,-10.13,-5.55,0.26

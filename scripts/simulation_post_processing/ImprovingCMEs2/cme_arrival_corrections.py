@@ -18,11 +18,12 @@ import os
 pl.Config.set_tbl_cols(-1)      # polars settings to show all the columns
 pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 
-which_craft = "AB" # this can be A, B, or AB
+which_craft = "AB"              # this can be A, B, or AB
+cme_01_table = False             # make a .csv file with CME01 features. Most of the time it should be false
 
 address = "../../../Data/ImprovingCMEs2/"
 
-minutes = 90                    # how many last minutes to use
+minutes = 0                    # how many last minutes to use
 ################################################################################
 # HELPER FUNCTIONS
 ################################################################################
@@ -49,10 +50,14 @@ df_out = pl.DataFrame(schema = {"CME_num": pl.String,
                         "ML_error_mean": pl.Float64,
                         "ML_error_std": pl.Float64})
 
+"""
 cmes = ['01_2010-04-03', '02_2010-05-23', '03_2010-08-01', '04_2011-09-06', 
         '05_2011-09-13', '06_2011-10-22', '07_2012-01-19', '08_2012-03-07', 
         '09_2012-06-14', '10_2012-07-03', '11_2012-07-12' , '12_2012-09-27', 
         '13_2012-10-05']
+"""
+
+cmes = ["01_2010-04-03"]
 
 # making the file for storage
 outfile = f"ML_diff_results_{which_craft}.csv"
@@ -60,6 +65,7 @@ with open(outfile, 'w') as f:
     f.write('CME_num,Actual_TT,Seed_TT,ML_TT_mean,ML_TT_std,Seed_error,ML_error_mean,ML_error_std\n')
 
 for cme in cmes:
+    # the two things that need uncertainties 
     ML_uncertainty = {"ML_TT" : [], "ML_error": []}
 
     # get the cme eruption time
@@ -76,6 +82,26 @@ for cme in cmes:
     # read the data from the train file
     data_A = pl.read_csv(address + 'training_data/Train_diff_' + cme + '_A_v2.txt')
     data_B = pl.read_csv(address + 'training_data/Train_diff_' + cme + '_B_v2.txt')
+
+    # make the table for the paper
+    if cme_01_table:
+        # only the final times on both data frames 
+        data_A = data_A.filter(
+            pl.col("Time") == (pl.col("Time").max())
+        )
+        data_B = data_B.filter(
+            pl.col("Time") == (pl.col("Time").max())
+        )
+
+        # join the dataframes 
+        result = data_A.join(data_B, on = "ensemble_member")
+
+        # delete columns, change column names and order them
+        result = result.drop(["Time_since_eruption", "Time_since_eruption_right", "Travel_time_right"])
+        result = result.rename({"Time" : "Time_A", "Time_right" : "Time_B"})
+        result = result.select(["Time_A", "Time_B", "ensemble_member", "EA_diff_A", "EA_diff_B", "Travel_time"])
+        result.write_csv("cme_01_table.csv")
+        sys.exit("Table is written. Make the variable cme_01_table == False for the code to work!!")
 
     # convert string to datetime object
     data_A = data_A.with_columns(
@@ -121,6 +147,9 @@ for cme in cmes:
         elif which_craft == "A":
             X = data_filtered_A[["EA_diff_A"]]
 
+        elif which_craft == "B":
+            X = data_filtered_B[["EA_diff_B"]]
+
         y = data_filtered_A[["Travel_time"]]
         y = y.to_numpy().ravel()
 
@@ -144,6 +173,10 @@ for cme in cmes:
         elif which_craft == "A":
             X_inference = pl.DataFrame([[0.0]],
                 schema = ["EA_diff_A"])
+            
+        elif which_craft == "B":
+            X_inference = pl.DataFrame([[0.0]],
+                schema = ["EA_diff_B"])
 
         prediction = model.predict(X_inference)[0] # to have it as a float because model.predict() returns an array
 
