@@ -1,4 +1,4 @@
-# This code is to calculate the sensitivity of the Magnetic field (magnitude and B_z) 
+# This code is to calculate the sensitivity of the Magnetic field (magnitude and B_z) and other time series parameters
 # Based on Talwinder's 2023 simulation results
 
 import polars as pl
@@ -20,6 +20,7 @@ pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 # place holder for cme duration - I will figure out how to calculate CME end time later
 n_hours = 15
 den_jump = 0.1
+time_series_parameter = "B_z"
 
 address = "../../../Data/Sensitivity_analysis_B/"
 params = ["speed", "latitude", "longitude", "tilt", "half_angle", "aspect_ratio"]
@@ -128,10 +129,66 @@ def find_TOA(df0, df1, df2):
 
     return time_stamp_1, time_stamp_2
 
+def plot_difference(param_dict, gcs_param):
+    """ It plots the MSE differences and shades each cme differently, in case 
+        the sensitivity varies accross CMEs
+    """
+    y = np.asarray(param_dict[gcs_param])
+
+    cmes = [1, 3, 4, 5, 6]
+
+    n_groups = 5
+    group_size = 33
+    colors = plt.cm.tab10(np.arange(n_groups))
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    for i in range(n_groups):
+        start = i * group_size
+        end = start + group_size
+        x = np.arange(start, end)
+
+        ax.plot(
+            x,
+            y[start:end],
+            color=colors[i],
+            lw=2,
+            label=f"CME {cmes[i]}"
+        )
+
+        # Optional: lightly shade the x-range belonging to each pair
+        ax.axvspan(start - 0.5, end - 0.5, color=colors[i], alpha=0.12)
+
+    ax.set_xlabel("Counts")
+    ax.set_ylabel(fr"${time_series_parameter}$ time-series RMSE")
+    ax.set_title(f"165 {gcs_param} values: 5 groups of 33")
+    ax.legend(title="Group")
+    ax.set_xlim(-0.5, len(y) - 0.5)
+
+    plt.tight_layout()
+    plt.savefig(f"figures/{time_series_parameter}_{gcs_param}_diff.png", dpi = 300)
+    plt.close()
+
+def box_plot(param_dict):
+    """
+    Takes in the param dictionary and makes a box plot 
+    """
+
+    plt.boxplot(param_dict.values(), tick_labels = param_dict.keys(), whis = 1.5)
+
+    # Add details
+    plt.title("Box Plot of param sensitivities on Bz")
+    plt.xlabel("GCS params")
+    plt.ylabel("$B_{z}$ RMSE (nT)")
+
+    plt.tight_layout
+    plt.savefig("figures/box_plot_all_params.png", dpi = 300)
+    plt.close()
+
 ########################################
 # The main code
 
-cme_nums = [6]
+cme_nums = [1, 3, 4, 5, 6]
 
 for cme_num in cme_nums:
 
@@ -210,9 +267,9 @@ for cme_num in cme_nums:
             df0 = df0.select(["date", "column_5", "column_12"])
             df1 = df1.select(["date", "column_5", "column_12"])
             df2 = df2.select(["date", "column_5", "column_12"])
-            df0 = df0.rename({"column_5": "density", "column_12": "B_z"})
-            df1 = df1.rename({"column_5": "density", "column_12": "B_z"})
-            df2 = df2.rename({"column_5": "density", "column_12": "B_z"})
+            df0 = df0.rename({"column_5": "density", "column_12": time_series_parameter})
+            df1 = df1.rename({"column_5": "density", "column_12": time_series_parameter})
+            df2 = df2.rename({"column_5": "density", "column_12": time_series_parameter})
 
             # interpolate to match df0 time series 
             target_dates = df0.select("date").sort("date")
@@ -237,19 +294,12 @@ for cme_num in cme_nums:
                 pl.col("date").is_between(time_stamp_2, time_stamp_2 + timedelta(hours = n_hours))
             ).drop("density")
 
-            rmse_Bz = root_mean_squared_error(sliced_df1["B_z"], sliced_df2["B_z"])
+            rmse_Bz = root_mean_squared_error(sliced_df1[time_series_parameter], sliced_df2[time_series_parameter])
             
             param_sensitivity[param].append(rmse_Bz)
 
-print(param_sensitivity)
+# make the difference figures for all the parameters accross all the CMEs 
+for param in params:
+    plot_difference(param_sensitivity, param)
 
-# Now making the box plot out of this:
-# Plot the values and assign the keys as labels
-plt.boxplot(param_sensitivity.values(), tick_labels = param_sensitivity.keys(), whis = 1.5, showfliers = False)
-
-# Add details
-plt.title("Box Plot of param sensitivities on Bz")
-plt.xlabel("GCS params")
-plt.ylabel("RMSE values")
-
-plt.show()
+box_plot(param_sensitivity)
