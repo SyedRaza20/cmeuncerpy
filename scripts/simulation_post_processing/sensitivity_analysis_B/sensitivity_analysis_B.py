@@ -20,6 +20,13 @@ pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 # place holder for cme duration - I will figure out how to calculate CME end time later
 n_hours = 15
 den_jump = 0.1
+
+# all the parameters and the one we want to plot
+time_series_parameters = {"column_1" : "time", "column_2" : "Distance", "column_3" : "lon", 
+                          "column_4" : "lat", "column_5" : "density", "column_6" : "v_x", 
+                          "column_7" : "v_y", "column_8" : "v_z", "column_9" : "p", 
+                          "column_10" : "B_x", "column_11" : "B_y", "column_12" : "B_z", 
+                          "column_13" : "T"}
 time_series_parameter = "B_z"
 
 address = "../../../Data/Sensitivity_analysis_B/"
@@ -129,15 +136,13 @@ def find_TOA(df0, df1, df2):
 
     return time_stamp_1, time_stamp_2
 
-def plot_difference(param_dict, gcs_param):
+def plot_difference(param_dict, gcs_param, cmes):
     """ It plots the MSE differences and shades each cme differently, in case 
         the sensitivity varies accross CMEs
     """
     y = np.asarray(param_dict[gcs_param])
 
-    cmes = [1, 3, 4, 5, 6]
-
-    n_groups = 5
+    n_groups = len(cmes)
     group_size = 33
     colors = plt.cm.tab10(np.arange(n_groups))
 
@@ -169,20 +174,20 @@ def plot_difference(param_dict, gcs_param):
     plt.savefig(f"figures/{time_series_parameter}_{gcs_param}_diff.png", dpi = 300)
     plt.close()
 
-def box_plot(param_dict):
+def box_plot(param_dict, time_series_param):
     """
     Takes in the param dictionary and makes a box plot 
     """
 
-    plt.boxplot(param_dict.values(), tick_labels = param_dict.keys(), whis = 1.5)
+    plt.boxplot(param_dict.values(), tick_labels = param_dict.keys())
 
     # Add details
     plt.title("Box Plot of param sensitivities on Bz")
     plt.xlabel("GCS params")
-    plt.ylabel("$B_{z}$ RMSE (nT)")
+    plt.ylabel(f"${time_series_parameter}$ RMSE (nT)")
 
     plt.tight_layout
-    plt.savefig("figures/box_plot_all_params.png", dpi = 300)
+    plt.savefig(f"figures/box_plot_{time_series_param}.png", dpi = 300)
     plt.close()
 
 ########################################
@@ -239,10 +244,9 @@ for cme_num in cme_nums:
             filename0 = f"{address}Probe_files_{cme_num}/Earth_Ensemble_0.dat"
             filename1 = f"{address}Probe_files_{cme_num}/Earth_Ensemble_{pair[0]}.dat"
             filename2 = f"{address}Probe_files_{cme_num}/Earth_Ensemble_{pair[1]}.dat"
-            df0 = pl.read_csv(filename0, separator = " ", skip_rows = 3, has_header = False)
-            df1 = pl.read_csv(filename1, separator = " ", skip_rows = 3, has_header = False)
-            df2 = pl.read_csv(filename2, separator = " ", skip_rows = 3, has_header = False)
-
+            df0 = pl.read_csv(filename0, separator = " ", skip_rows = 3, has_header = False).rename(time_series_parameters)
+            df1 = pl.read_csv(filename1, separator = " ", skip_rows = 3, has_header = False).rename(time_series_parameters)
+            df2 = pl.read_csv(filename2, separator = " ", skip_rows = 3, has_header = False).rename(time_series_parameters)
 
             # make the year into datetime columns
             df0 = df0.with_columns(
@@ -263,13 +267,24 @@ for cme_num in cme_nums:
                 ).alias("date")
             )
 
+            # check if time_series_parameter is B_t. If so, then make this parameter
+            if time_series_parameter == "B_t":
+
+                df0 = df0.with_columns(
+                    (pl.col("B_x")**2 + pl.col("B_y")**2 + pl.col("B_z")**2).sqrt().alias("B_t")
+                )
+                df1 = df1.with_columns(
+                    (pl.col("B_x")**2 + pl.col("B_y")**2 + pl.col("B_z")**2).sqrt().alias("B_t")
+                )
+                df2 = df2.with_columns(
+                    (pl.col("B_x")**2 + pl.col("B_y")**2 + pl.col("B_z")**2).sqrt().alias("B_t")
+                )
+
+
             # keep only density (column_5), B_z (12), and date columns
-            df0 = df0.select(["date", "column_5", "column_12"])
-            df1 = df1.select(["date", "column_5", "column_12"])
-            df2 = df2.select(["date", "column_5", "column_12"])
-            df0 = df0.rename({"column_5": "density", "column_12": time_series_parameter})
-            df1 = df1.rename({"column_5": "density", "column_12": time_series_parameter})
-            df2 = df2.rename({"column_5": "density", "column_12": time_series_parameter})
+            df0 = df0.select(["date", "density", time_series_parameter])
+            df1 = df1.select(["date", "density", time_series_parameter])
+            df2 = df2.select(["date", "density", time_series_parameter])
 
             # interpolate to match df0 time series 
             target_dates = df0.select("date").sort("date")
@@ -300,6 +315,6 @@ for cme_num in cme_nums:
 
 # make the difference figures for all the parameters accross all the CMEs 
 for param in params:
-    plot_difference(param_sensitivity, param)
+    plot_difference(param_sensitivity, param, cme_nums)
 
-box_plot(param_sensitivity)
+box_plot(param_sensitivity, time_series_parameter)
