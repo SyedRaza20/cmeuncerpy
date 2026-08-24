@@ -19,11 +19,11 @@ pl.Config.set_tbl_cols(-1)      # polars settings to show all the columns
 pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 
 which_craft = "AB"              # this can be A, B, or AB
-cme_01_table = False             # make a .csv file with CME01 features. Most of the time it should be false
+cme_table = False               # make a .csv file with CME01 features. Most of the time it should be false
 
 address = "../../../Data/ImprovingCMEs2/"
 
-minutes = 0                    # how many last minutes to use
+minutes = 90                    # how many last minutes to use
 ################################################################################
 # HELPER FUNCTIONS
 ################################################################################
@@ -50,14 +50,10 @@ df_out = pl.DataFrame(schema = {"CME_num": pl.String,
                         "ML_error_mean": pl.Float64,
                         "ML_error_std": pl.Float64})
 
-"""
 cmes = ['01_2010-04-03', '02_2010-05-23', '03_2010-08-01', '04_2011-09-06', 
         '05_2011-09-13', '06_2011-10-22', '07_2012-01-19', '08_2012-03-07', 
         '09_2012-06-14', '10_2012-07-03', '11_2012-07-12' , '12_2012-09-27', 
         '13_2012-10-05']
-"""
-
-cmes = ["01_2010-04-03"]
 
 # making the file for storage
 outfile = f"ML_diff_results_{which_craft}.csv"
@@ -84,7 +80,7 @@ for cme in cmes:
     data_B = pl.read_csv(address + 'training_data/Train_diff_' + cme + '_B_v2.txt')
 
     # make the table for the paper
-    if cme_01_table:
+    if cme_table:
         # only the final times on both data frames 
         data_A = data_A.filter(
             pl.col("Time") == (pl.col("Time").max())
@@ -100,7 +96,7 @@ for cme in cmes:
         result = result.drop(["Time_since_eruption", "Time_since_eruption_right", "Travel_time_right"])
         result = result.rename({"Time" : "Time_A", "Time_right" : "Time_B"})
         result = result.select(["Time_A", "Time_B", "ensemble_member", "EA_diff_A", "EA_diff_B", "Travel_time"])
-        result.write_csv("cme_01_table.csv")
+        result.write_csv(f"cme_{cme}_table.csv")
         sys.exit("Table is written. Make the variable cme_01_table == False for the code to work!!")
 
     # convert string to datetime object
@@ -153,15 +149,11 @@ for cme in cmes:
         y = data_filtered_A[["Travel_time"]]
         y = y.to_numpy().ravel()
 
-        # make the ML model
-        model = linear_model.LassoLarsCV(cv = 2)
-        # model = linear_model.RidgeCV(alphas = [0.1, 1.0, 10.0])
-        # model = linear_model.ElasticNet(alpha=0.01, l1_ratio=0.5) 
-        # model = linear_model.Lasso(alpha=0.01)
-        # model = linear_model.BayesianRidge()
+        # make the ML model (try linear models)
+        model = linear_model.LassoLarsCV(cv = 2)                        
         # model = linear_model.RANSACRegressor()
         # model = linear_model.TheilSenRegressor()
-
+        
         # train the model
         model.fit(X, y)
 
