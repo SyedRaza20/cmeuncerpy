@@ -11,11 +11,15 @@ from datetime import timedelta, datetime
 from sklearn.metrics import mean_squared_error, root_mean_squared_error, mean_absolute_error
 from scipy.stats import pearsonr
 from dtaidistance import dtw
+from pathlib import Path
 
 ########################################
 # Settings 
 pl.Config.set_tbl_cols(-1)      # polars settings to show all the columns
 pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
+
+# Boolean to plot time series
+plot_time_series = True
 
 # place holder for cme duration - I will figure out how to calculate CME end time later
 n_hours = 15
@@ -28,6 +32,7 @@ time_series_parameters = {"column_1" : "time", "column_2" : "Distance", "column_
                           "column_10" : "B_x", "column_11" : "B_y", "column_12" : "B_z", 
                           "column_13" : "T"}
 time_series_parameter = "B_z"
+unit = "nT"
 
 address = "../../../Data/Sensitivity_analysis_B/"
 params = ["speed", "latitude", "longitude", "tilt", "half_angle", "aspect_ratio"]
@@ -310,6 +315,22 @@ for cme_num in cme_nums:
             ).drop("density")
 
             rmse_Bz = root_mean_squared_error(sliced_df1[time_series_parameter], sliced_df2[time_series_parameter])
+
+            # make the time series plots (just for fun)
+            if plot_time_series == True:
+                figname = f"figures/{cme_num}/{param}/pair_{pair[0]}_{pair[1]}.png"
+                address_fig = Path(figname)
+                address_fig.parent.mkdir(parents=True, exist_ok=True)  # fixed: create parent dir
+
+                fig, ax = plt.subplots()  # good practice: avoid reusing global state
+                ax.plot(sliced_df1[time_series_parameter], color="red", label=f"ensemble_{pair[0]}")
+                ax.plot(sliced_df2[time_series_parameter], color="green", label=f"ensemble_{pair[1]}")
+                ax.set_xlabel("Time (hours)")
+                ax.set_ylabel(f"{time_series_parameter} ({unit})")
+                ax.set_title(f"The pair RMSE: {rmse_Bz:.2g} ({unit})")
+                ax.legend()
+                fig.savefig(figname, dpi=300)
+                plt.close(fig)  # important in loops
             
             param_sensitivity[param].append(rmse_Bz)
 
