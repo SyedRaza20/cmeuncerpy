@@ -21,7 +21,8 @@ pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 # Boolean to plot time series
 plot_time_series = True
 
-# place holder for cme duration - I will figure out how to calculate CME end time later
+# place holder for cme duration and arrival
+# will probably need to use different values for this
 n_hours = 15
 den_jump = 0.1
 
@@ -31,6 +32,9 @@ time_series_parameters = {"column_1" : "time", "column_2" : "Distance", "column_
                           "column_7" : "v_y", "column_8" : "v_z", "column_9" : "p", 
                           "column_10" : "B_x", "column_11" : "B_y", "column_12" : "B_z", 
                           "column_13" : "T"}
+
+# time series parameter could be "B_z", "B_t", or "theta". 
+# Where theta is defined as the angle of the magnetic ffield vector with the z axis 
 time_series_parameter = "B_z"
 unit = "nT"
 
@@ -187,9 +191,9 @@ def box_plot(param_dict, time_series_param):
     plt.boxplot(param_dict.values(), tick_labels = param_dict.keys())
 
     # Add details
-    plt.title("Box Plot of param sensitivities on Bz")
+    plt.title(f"Box Plot of param sensitivities on {time_series_parameter}")
     plt.xlabel("GCS params")
-    plt.ylabel(f"${time_series_parameter}$ RMSE (nT)")
+    plt.ylabel(f"${time_series_parameter}$ RMSE ({unit})")
 
     plt.tight_layout
     plt.savefig(f"figures/box_plot_{time_series_param}.png", dpi = 300)
@@ -207,7 +211,7 @@ for cme_num in cme_nums:
         names = ["ensemble_member", "speed", "latitude", "longitude", "tilt", "half_angle", "aspect_ratio"])
     )
 
-    # get the iunique values of each GCS parameter
+    # get the unique values of each GCS parameter
     unique_speeds = gcs_params["speed"].unique().to_list()
     unique_lat = gcs_params["latitude"].unique().to_list()
     unique_lon = gcs_params["longitude"].unique().to_list()
@@ -283,6 +287,18 @@ for cme_num in cme_nums:
                 )
                 df2 = df2.with_columns(
                     (pl.col("B_x")**2 + pl.col("B_y")**2 + pl.col("B_z")**2).sqrt().alias("B_t")
+                )
+
+            elif time_series_parameter == "theta":
+
+                df0 = df0.with_columns(
+                    ((pl.col("B_z")) / (pl.col("B_x")**2 + pl.col("B_y")**2 + pl.col("B_z")**2).sqrt()).arccos().alias("theta")
+                )
+                df1 = df1.with_columns(
+                    ((pl.col("B_z")) / (pl.col("B_x")**2 + pl.col("B_y")**2 + pl.col("B_z")**2).sqrt()).arccos().alias("theta")
+                )
+                df2 = df2.with_columns(
+                    ((pl.col("B_z")) / (pl.col("B_x")**2 + pl.col("B_y")**2 + pl.col("B_z")**2).sqrt()).arccos().alias("theta")
                 )
 
 

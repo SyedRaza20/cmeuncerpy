@@ -18,7 +18,7 @@ import os
 pl.Config.set_tbl_cols(-1)      # polars settings to show all the columns
 pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 
-which_craft = "AB"              # this can be A, B, or AB
+which_craft = "A"              # this can be A, B, or AB
 cme_table = False               # make a .csv file with CME01 features. Most of the time it should be false
 
 address = "../../../Data/ImprovingCMEs2/"
