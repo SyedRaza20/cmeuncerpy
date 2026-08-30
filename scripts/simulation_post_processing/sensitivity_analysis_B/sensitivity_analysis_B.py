@@ -19,7 +19,7 @@ pl.Config.set_tbl_cols(-1)      # polars settings to show all the columns
 pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 
 # Boolean to plot time series
-plot_time_series = True
+plot_time_series = False
 
 # place holder for cme duration and arrival
 # will probably need to use different values for this
@@ -35,7 +35,7 @@ time_series_parameters = {"column_1" : "time", "column_2" : "Distance", "column_
 
 # time series parameter could be "B_z", "B_t", or "theta". 
 # Where theta is defined as the angle of the magnetic ffield vector with the z axis 
-time_series_parameter = "B_z"
+time_series_parameter = "B_t"
 unit = "nT"
 
 address = "../../../Data/Sensitivity_analysis_B/"
@@ -175,7 +175,7 @@ def plot_difference(param_dict, gcs_param, cmes):
 
     ax.set_xlabel("Counts")
     ax.set_ylabel(fr"${time_series_parameter}$ time-series RMSE")
-    ax.set_title(f"165 {gcs_param} values: 5 groups of 33")
+    ax.set_title(f"{33 * len(cmes)} {gcs_param} values: {len(cmes)} groups of 33")
     ax.legend(title="Group")
     ax.set_xlim(-0.5, len(y) - 0.5)
 
@@ -202,7 +202,7 @@ def box_plot(param_dict, time_series_param):
 ########################################
 # The main code
 
-cme_nums = [1, 3, 4, 5, 6]
+cme_nums = [1, 2, 3, 4, 5, 6]
 
 for cme_num in cme_nums:
 
@@ -256,6 +256,20 @@ for cme_num in cme_nums:
             df0 = pl.read_csv(filename0, separator = " ", skip_rows = 3, has_header = False).rename(time_series_parameters)
             df1 = pl.read_csv(filename1, separator = " ", skip_rows = 3, has_header = False).rename(time_series_parameters)
             df2 = pl.read_csv(filename2, separator = " ", skip_rows = 3, has_header = False).rename(time_series_parameters)
+
+            # do the magnetic field corrections
+            # Create a new list containing the corrected DataFrames
+            corrected_dfs = [
+                df.with_columns([
+                    pl.col("B_x") / 10.0,
+                    pl.col("B_y") / 10.0,
+                    - pl.col("B_z") / 10.0
+                ])
+                for df in [df0, df1, df2]
+            ]
+
+            # Unpack them back to your original variables if needed
+            df0, df1, df2 = corrected_dfs
 
             # make the year into datetime columns
             df0 = df0.with_columns(
