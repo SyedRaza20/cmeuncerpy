@@ -1,3 +1,14 @@
+# These are the ML experiments taht will be reported in the paper
+# There are two modes to this:
+#               (1) The first one finds the time common between the STEREO A 
+#                   and STEREO B and gives a MAE estimate per minute. This 
+#                   will tell us how the MAE is changing over time
+#               (2) This mode will take only the last 90 minutes and provide the 
+#                   mean and std
+
+# THIS FILE REPRESENTS THE SECOND MODE. 
+
+
 # the imports
 import polars as pl
 import numpy as np
@@ -18,7 +29,7 @@ import os
 pl.Config.set_tbl_cols(-1)      # polars settings to show all the columns
 pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 
-which_craft = "A"              # this can be A, B, or AB
+which_craft = "AB"              # this can be A, B, or AB
 cme_table = False               # make a .csv file with CME01 features. Most of the time it should be false
 
 address = "../../../Data/ImprovingCMEs2/"
@@ -38,7 +49,8 @@ def read_time_from_file(filename):
     return time
 
 ################################################################################
-# the main code 
+# the main code
+
 
 # the out data frame
 df_out = pl.DataFrame(schema = {"CME_num": pl.String, 
@@ -56,7 +68,7 @@ cmes = ['01_2010-04-03', '02_2010-05-23', '03_2010-08-01', '04_2011-09-06',
         '13_2012-10-05']
 
 # making the file for storage
-outfile = f"ML_diff_results_{which_craft}.csv"
+outfile = f"diff_results/ML_diff_results_{which_craft}.csv"
 with open(outfile, 'w') as f:
     f.write('CME_num,Actual_TT,Seed_TT,ML_TT_mean,ML_TT_std,Seed_error,ML_error_mean,ML_error_std\n')
 
