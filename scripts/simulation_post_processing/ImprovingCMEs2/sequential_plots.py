@@ -51,8 +51,8 @@ def plot_single_cme(cme_id: str, df: pl.DataFrame, save: bool = True, show: bool
     ax.plot(time, err, color="#1f77b4", lw=1.6, alpha=0.9)
     ax.axhline(0, color="black", lw=0.8, ls="--", alpha=0.6)
 
-    ax.fill_between(time, err, 0, where=(err >= 0), color="#d62728", alpha=0.15)
-    ax.fill_between(time, err, 0, where=(err < 0), color="#2ca02c", alpha=0.15)
+    ax.fill_between(time, err, 0, where=(err >= 0), color="#2ca02c", alpha=0.15)
+    ax.fill_between(time, err, 0, where=(err < 0), color="#d62728", alpha=0.15)
 
     ax.set_title(f"ML Error vs. Time — CME {cme_id}", fontsize=13, fontweight="bold")
     ax.set_xlabel("Time")
@@ -98,10 +98,10 @@ def plot_all_cmes_grid(cmes, ncols=3):
         time = df["Time"].to_list()
         err = df["ML_error"].to_numpy()
 
-        ax.plot(time, err, lw=1.3, color="#2ca02c")
+        ax.plot(time, err, lw=1.3, color="#1f77b4")
         ax.axhline(0, color="gray", lw=0.7, ls="--")
-        ax.fill_between(time, err, 0, where=(err >= 0), color="#d62728", alpha=0.15)
-        ax.fill_between(time, err, 0, where=(err < 0), color="#2ca02c", alpha=0.15)
+        ax.fill_between(time, err, 0, where=(err >= 0), color="#2ca02c", alpha=0.15)
+        ax.fill_between(time, err, 0, where=(err < 0), color="#d62728", alpha=0.15)
         ax.set_title(cme_id, fontsize=10)
         ax.tick_params(axis="x", labelrotation=30, labelsize=7)
         ax.tick_params(axis="y", labelsize=8)
@@ -118,11 +118,11 @@ def plot_all_cmes_grid(cmes, ncols=3):
         for j in range(len(cmes), len(axes)):
             fig.delaxes(axes[j])
 
-    fig.suptitle("ML Error Evolution Across All CME Events", fontsize=15, fontweight="bold", y=1.02)
-    fig.text(0.5, -0.01, "Time", ha="center", fontsize=11)
-    fig.text(-0.005, 0.5, "ML Error (hours)", va="center", rotation="vertical", fontsize=11)
+    fig.suptitle("ML Error Evolution Across All CME Events", fontsize=30, fontweight="bold", y=1.02)
+    fig.text(0.5, -0.01, "Time", ha="center", fontsize=16)
+    fig.text(-0.005, 0.5, "ML Error (hours)", va="center", rotation="vertical", fontsize=16)
     fig.tight_layout()
-    fig.savefig(OUT_DIR / "all_cmes_grid.png", bbox_inches="tight", dpi=150)
+    fig.savefig(OUT_DIR / "all_cmes_grid.png", bbox_inches="tight", dpi=300)
     plt.close(fig)
 
 
@@ -131,8 +131,20 @@ def plot_all_cmes_grid(cmes, ncols=3):
 #    line up on one axis (great for spotting systematic trends)
 # ---------------------------------------------------------------
 def plot_overlay_normalized(cmes):
+    # Okabe-Ito colorblind-safe palette (8 colors), cycled with
+    # distinct linestyle/marker combos to safely cover 13 categories.
+    cb_colors = [
+        "#0072B2",  # blue
+        "#E69F00",  # orange
+        "#009E73",  # bluish green
+        "#CC79A7",  # reddish purple
+        "#D55E00",  # vermillion
+        "#56B4E9",  # sky blue
+        "#F0E442",  # yellow
+        "#000000",  # black
+    ]
+
     fig, ax = plt.subplots(figsize=(10, 6))
-    cmap = plt.get_cmap("tab20")
 
     for i, cme_id in enumerate(cmes):
         try:
@@ -143,9 +155,14 @@ def plot_overlay_normalized(cmes):
         err = df["ML_error"].to_numpy()
         t0 = time[0]
         hours_elapsed = np.array([(t - t0).total_seconds() / 3600 for t in time])
-        ax.plot(hours_elapsed, err, label=cme_id, color=cmap(i % 20), lw=1.4, alpha=0.85)
 
-    ax.axhline(0, color="black", lw=1, ls="--", alpha=0.6)
+        color = cb_colors[i % len(cb_colors)]
+
+        ax.plot(hours_elapsed, err, label=cme_id, color=color,
+                markevery=max(1, len(hours_elapsed) // 12),
+                markersize=5, lw=1.6, alpha=0.9)
+
+    ax.axhline(0, color="black", lw=1, ls="--", alpha=0.5)
     ax.set_xlabel("Hours since sequential run start")
     ax.set_ylabel("ML Error (hours)")
     ax.set_title("ML Error Trajectories — All CMEs Overlaid", fontsize=13, fontweight="bold")
@@ -166,6 +183,6 @@ if __name__ == "__main__":
             print(f"Missing file for {cme_id}, skipping.")
 
     plot_all_cmes_grid(cmes)
-    plot_overlay_normalized(cmes)
+    # plot_overlay_normalized(cmes)
 
     print(f"All figures saved to: {OUT_DIR.resolve()}")
