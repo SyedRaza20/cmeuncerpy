@@ -44,7 +44,6 @@ def read_time_from_file(filename):
     time = datetime.strptime(time, '%Y/%m/%dT%H:%M')
     return time
 ################################################################################
-
 cmes = ['01_2010-04-03', '02_2010-05-23', '03_2010-08-01', '04_2011-09-06', 
         '05_2011-09-13', '06_2011-10-22', '07_2012-01-19', '08_2012-03-07', 
         '09_2012-06-14', '10_2012-07-03', '11_2012-07-12' , '12_2012-09-27', 
@@ -78,6 +77,9 @@ for cme in cmes:
     data_intersection = data_A.join(data_B, on = ["Time", "ensemble_member"], how = "inner")
     data_intersection = data_intersection.select(["Time", "ensemble_member", "EA_diff_A", "EA_diff_B", "Travel_time"])
     data_intersection = data_intersection.sort("Time")
+
+    # how many hours is the intersection available for this CME
+    print(f"For {cme}, the common time between STEREO-A and STEREO-B was: {data_intersection.height / 21} minutes, which equates to: {data_intersection.height / 21 / 60} hours")
 
     unique_times = (data_intersection
                     .select(pl.col("Time").unique())

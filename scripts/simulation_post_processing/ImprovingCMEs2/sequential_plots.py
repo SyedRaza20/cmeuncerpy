@@ -19,9 +19,8 @@ cmes = ['01_2010-04-03', '02_2010-05-23', '03_2010-08-01', '04_2011-09-06',
         '13_2012-10-05']
 
 RESULTS_DIR = Path("sequential_results")
-OUT_DIR = Path("figures")
+OUT_DIR = Path("sequential_results/figures")
 OUT_DIR.mkdir(exist_ok=True)
-
 
 def load_cme(cme_id: str) -> pl.DataFrame:
     """Load a single CME's sequential results and parse the Time column."""
