@@ -54,7 +54,7 @@ for cme in cmes:
     # make an outfile for this cme
     outfile = f"sequential_results/{cme}.csv"
     with open(outfile, 'w') as f:
-        f.write('CME_num,Actual_TT,Seed_TT,ML_TT_mean,ML_TT_std,Seed_error,ML_error_mean,ML_error_std\n')
+        f.write('Time,Actual_TT,Seed_TT,ML_TT,Seed_error,ML_error\n')
 
     # get the cme eruption time
     erupt_file = address + "erupt_and_arrival_times/" + cme + "/Erupt_time.txt"
@@ -119,4 +119,4 @@ for cme in cmes:
 
         # 2. Open and safely append/create the file
         with open(outfile, 'a') as f:
-            f.write(f"{cme},{cme_obs_travel_time:.2f},{seed_travel_time:.2f},{prediction:.2f},{seed_error:.2f},{ML_error:.2f}\n")
+            f.write(f"{time},{cme_obs_travel_time:.2f},{seed_travel_time:.2f},{prediction:.2f},{seed_error:.2f},{ML_error:.2f}\n")
