@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
 from pathlib import Path
+import sys
+from datetime import datetime
 
 plt.rcParams.update({
     "figure.dpi": 120,
@@ -23,7 +25,13 @@ OUT_DIR = Path("sequential_results/figures")
 OUT_DIR.mkdir(exist_ok=True)
 
 def load_cme(cme_id: str) -> pl.DataFrame:
-    """Load a single CME's sequential results and parse the Time column."""
+    """Load a single CME's sequential results and parse the Time column.
+    The time column should represent the difference in hours between the 
+    time of training and the arrival time of the given CME. 
+        Although, I still want them in the datetime format. 
+        just that the datetime number is the amount of time
+        before the CME actually arrives.
+    """
     df = pl.read_csv(RESULTS_DIR / f"{cme_id}.csv")
     if df["Time"].dtype == pl.Utf8:
         df = df.with_columns(pl.col("Time").str.to_datetime(strict=False))
@@ -36,8 +44,18 @@ def load_cme(cme_id: str) -> pl.DataFrame:
     ).agg(
         pl.col('ML_error').mean()
     )
-    return df
 
+    # link to the arrival time of the CME
+    arrival_link = f"/Users/syedraza/cmeuncerpy/Data/ImprovingCMEs2/erupt_and_arrival_times/{cme_id}/Arrival_time.txt"
+    time = pl.read_csv(arrival_link, has_header = False).item()
+    time_dt = datetime.strptime(time, "%Y/%m/%dT%H:%M")
+
+    # change the time column as the difference from TOA
+    df = df.with_columns(
+        Time_duration = time_dt - pl.col("Time")
+    )
+
+    return df
 
 # ---------------------------------------------------------------
 # 1. Individual, styled plot per CME (saved + optionally shown)
@@ -133,36 +151,45 @@ def plot_overlay_normalized(cmes):
     # Okabe-Ito colorblind-safe palette (8 colors), cycled with
     # distinct linestyle/marker combos to safely cover 13 categories.
     cb_colors = [
-        "#0072B2",  # blue
-        "#E69F00",  # orange
-        "#009E73",  # bluish green
-        "#CC79A7",  # reddish purple
-        "#D55E00",  # vermillion
-        "#56B4E9",  # sky blue
-        "#F0E442",  # yellow
+        "#1A6FA0",  # blue
+        "#C1963A",  # orange
+        "#26AE8A",  # bluish green
+        "#932963",  # reddish purple
+        "#995725",  # vermillion
+        "#166796",  # sky blue
+        "#F5E832",  # yellow
         "#000000",  # black
     ]
 
     fig, ax = plt.subplots(figsize=(10, 6))
+
+    max_lead = 0.0
 
     for i, cme_id in enumerate(cmes):
         try:
             df = load_cme(cme_id)
         except FileNotFoundError:
             continue
-        time = df["Time"].to_list()
+
         err = df["ML_error"].to_numpy()
-        t0 = time[0]
-        hours_elapsed = np.array([(t - t0).total_seconds() / 3600 for t in time])
+        lead_hours = df["Time_duration"].dt.total_seconds().to_numpy() / 3600.0
+
+        max_lead = max(max_lead, lead_hours.max())
 
         color = cb_colors[i % len(cb_colors)]
 
-        ax.plot(hours_elapsed, err, label=cme_id, color=color,
-                markevery=max(1, len(hours_elapsed) // 12),
+        ax.plot(lead_hours, err, label=cme_id, color=color,
+                markevery=max(1, len(lead_hours) // 12),
                 markersize=5, lw=1.6, alpha=0.9)
 
     ax.axhline(0, color="black", lw=1, ls="--", alpha=0.5)
-    ax.set_xlabel("Hours since sequential run start")
+    ax.axvline(0, color="gray", lw=1, ls=":", alpha=0.6)
+
+    # Arrival (Time_duration = 0) sits at the right edge; runs proceed
+    # right -> left as lead time counts down toward arrival.
+    ax.set_xlim(max_lead * 1.02, -max_lead * 0.02)
+
+    ax.set_xlabel("Lead time to arrival (hours)")
     ax.set_ylabel("ML Error (hours)")
     ax.set_title("ML Error Trajectories — All CMEs Overlaid", fontsize=13, fontweight="bold")
     ax.legend(ncol=2, fontsize=8, loc="upper right", framealpha=0.9)
@@ -182,6 +209,6 @@ if __name__ == "__main__":
             print(f"Missing file for {cme_id}, skipping.")
 
     plot_all_cmes_grid(cmes)
-    # plot_overlay_normalized(cmes)
+    plot_overlay_normalized(cmes)
 
     print(f"All figures saved to: {OUT_DIR.resolve()}")
