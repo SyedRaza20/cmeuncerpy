@@ -89,7 +89,7 @@ for cme in cmes:
                 )
 
     # do a for loop over time now
-    for time in unique_times:
+    for time in unique_times[1:]:
         # grab the training data for this time
         time_data = data_intersection.filter(pl.col("Time") == time)
 

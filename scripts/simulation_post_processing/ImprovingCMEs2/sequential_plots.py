@@ -147,9 +147,42 @@ def plot_all_cmes_grid(cmes, ncols=3):
 # 3. Overlay plot — normalized "time since start" so all events
 #    line up on one axis (great for spotting systematic trends)
 # ---------------------------------------------------------------
-def plot_overlay_normalized(cmes):
-    # Okabe-Ito colorblind-safe palette (8 colors), cycled with
-    # distinct linestyle/marker combos to safely cover 13 categories.
+def plot_overlay_normalized(cmes, leader_length=0.03, leader_angle_deg=None):
+    """
+    Overlay all CME ML-error trajectories on a shared lead-time x-axis.
+
+    Parameters
+    ----------
+    leader_length : float
+        Length of the leader line from curve endpoint to label, as a
+        fraction of max_lead. Try 0.03-0.10.
+    leader_angle_deg : float or sequence of float, optional
+        Angle(s) of the leader line, in degrees, measured from the
+        horizontal (0 = horizontal, pointing left/away from arrival;
+        90 = straight up; -90 = straight down). Positive = label angled
+        upward, negative = downward.
+        - If a single float, that angle is used for every curve, and its
+          sign is still alternated between adjacent curves (sorted by
+          endpoint error) to reduce overlap -- same behavior as before.
+        - If a sequence (list/array), it must have one entry per curve in
+          `cmes` (same order as plotted), giving full manual control over
+          each individual label's angle. No automatic sign-alternation is
+          applied in this case -- you control the sign directly per entry
+          (e.g. pass a negative value to angle a specific label downward).
+        - If None (default), uses 20 degrees for every curve, with
+          alternation -- matching the previous default behavior.
+
+    Examples
+    --------
+    # Same angle for all curves (old behavior):
+    plot_overlay_normalized(cmes, leader_angle_deg=20)
+
+    # Per-curve manual control, one entry per curve in `cmes` order:
+    plot_overlay_normalized(
+        cmes,
+        leader_angle_deg=[15, -25, 30, 10, -15, 20, 40, -30, 25, -10, 15, -20, 35],
+    )
+    """
     cb_colors = [
         "#1A6FA0",  # blue
         "#C1963A",  # orange
@@ -157,13 +190,34 @@ def plot_overlay_normalized(cmes):
         "#932963",  # reddish purple
         "#995725",  # vermillion
         "#166796",  # sky blue
-        "#F5E832",  # yellow
+        "#E8B800",  # yellow (darkened for contrast on white background)
         "#000000",  # black
     ]
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    n_curves = len(cmes)
+
+    # Normalize leader_angle_deg into a per-curve array aligned with the
+    # plotting order (index i in `cmes`), plus a flag for whether we
+    # should auto-alternate sign (only when a single scalar/None was given).
+    if leader_angle_deg is None:
+        angles_by_index = np.full(n_curves, 20.0)
+        auto_alternate = True
+    elif np.isscalar(leader_angle_deg):
+        angles_by_index = np.full(n_curves, float(leader_angle_deg))
+        auto_alternate = True
+    else:
+        angles_by_index = np.asarray(leader_angle_deg, dtype=float)
+        if len(angles_by_index) != n_curves:
+            raise ValueError(
+                f"leader_angle_deg has {len(angles_by_index)} entries, "
+                f"but {n_curves} curves were given -- provide one angle per curve."
+            )
+        auto_alternate = False
+
+    fig, ax = plt.subplots(figsize=(11, 6.5))
 
     max_lead = 0.0
+    end_points = []  # (lead_hours_at_end, err_at_end, number_label, color, angle_deg)
 
     for i, cme_id in enumerate(cmes):
         try:
@@ -178,21 +232,60 @@ def plot_overlay_normalized(cmes):
 
         color = cb_colors[i % len(cb_colors)]
 
-        ax.plot(lead_hours, err, label=cme_id, color=color,
-                markevery=max(1, len(lead_hours) // 12),
-                markersize=5, lw=1.6, alpha=0.9)
+        ax.plot(lead_hours, err, color=color, lw=1.6, alpha=0.9, zorder=3)
 
-    ax.axhline(0, color="black", lw=1, ls="--", alpha=0.5)
-    ax.axvline(0, color="gray", lw=1, ls=":", alpha=0.6)
+        # Curves run right -> left toward arrival, so the "end" of each
+        # trajectory (closest to arrival) sits at min(lead_hours).
+        end_idx = int(np.argmin(lead_hours))
+        end_points.append(
+            (lead_hours[end_idx], err[end_idx], str(i + 1), color, angles_by_index[i])
+        )
+
+    ax.axhline(0, color="black", lw=1, ls="--", alpha=0.5, zorder=1)
+    ax.axvline(0, color="gray", lw=1, ls=":", alpha=0.6, zorder=1)
 
     # Arrival (Time_duration = 0) sits at the right edge; runs proceed
     # right -> left as lead time counts down toward arrival.
     ax.set_xlim(max_lead * 1.02, -max_lead * 0.02)
 
-    ax.set_xlabel("Lead time to arrival (hours)")
-    ax.set_ylabel("ML Error (hours)")
-    ax.set_title("ML Error Trajectories — All CMEs Overlaid", fontsize=13, fontweight="bold")
-    ax.legend(ncol=2, fontsize=8, loc="upper right", framealpha=0.9)
+    # --- Numeric endpoint labeling with per-curve leader angle ---
+    # Sorting by endpoint error keeps the auto-alternation (when active)
+    # spreading labels sensibly through the convergence cluster.
+    end_points.sort(key=lambda p: p[1])
+
+    for j, (x, y, label, color, angle_deg) in enumerate(end_points):
+        if auto_alternate:
+            sign = 1 if j % 2 == 0 else -1
+        else:
+            sign = 1  # manual angles already encode their own sign
+        eff_angle = angle_deg * sign
+
+        dx = -leader_length * max_lead * np.cos(np.radians(eff_angle))
+        dy = leader_length * max_lead * np.sin(np.radians(eff_angle))
+
+        label_x = x + dx
+        label_y = y + dy
+
+        ax.annotate(
+            label,
+            xy=(x, y), xycoords="data",
+            xytext=(label_x, label_y), textcoords="data",
+            fontsize=8, color=color, fontweight="bold",
+            va="center", ha="center",
+            arrowprops=dict(
+                arrowstyle="-", color=color, lw=0.7, alpha=0.7,
+                shrinkA=0, shrinkB=2,
+            ),
+            zorder=4,
+        )
+
+    ax.set_xlabel("Lead time to arrival (hours)", fontsize=14)
+    ax.set_ylabel("ML Error (hours)", fontsize=14)
+    ax.set_title(
+        "ML Error Trajectories",
+        fontsize=18,
+    )
+
     fig.tight_layout()
     fig.savefig(OUT_DIR / "overlay_normalized.png", bbox_inches="tight", dpi=150)
     plt.close(fig)
@@ -209,6 +302,7 @@ if __name__ == "__main__":
             print(f"Missing file for {cme_id}, skipping.")
 
     plot_all_cmes_grid(cmes)
-    plot_overlay_normalized(cmes)
+    plot_overlay_normalized(cmes,
+            leader_angle_deg=[5, -70, -3, 10, 20, 60, -30, 40, 25, -10, 15, 30, 10])
 
     print(f"All figures saved to: {OUT_DIR.resolve()}")
