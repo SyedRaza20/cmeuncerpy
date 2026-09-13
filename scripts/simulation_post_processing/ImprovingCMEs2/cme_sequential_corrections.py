@@ -3,7 +3,7 @@
 #               (1) The first one finds the time common between the STEREO A 
 #                   and STEREO B and gives a MAE estimate per minute. This 
 #                   will tell us how the MAE is changing as the observations 
-#                   come in
+#                   come in. The Lead time vs accuracy argument
 #               (2) This mode will take only the last 90 minutes and provide the 
 #                   mean and std
 
