@@ -11,6 +11,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 (registers 3d projection)
+import sys
 
 # ---------------------------------------------------------------------------
 # Geometry parameters
@@ -18,8 +19,9 @@ from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 (registers 3d projection)
 r_min, r_max = 0.33, 1.0     # radial extent [AU]
 n_r = 20                     # number of radial "surfaces" (shells)
 
-n_ang = 31                   # number of samples per angular axis
-ang_min, ang_max = -30, 30    # longitude/latitude extent [deg], 2-deg steps
+ang_min, ang_max = -31, 31    # longitude/latitude extent [deg], 
+steps = 2
+n_ang = 2 * (ang_max // steps) + 1                  # number of samples per angular axis
 
 r_vals = np.linspace(r_min, r_max, n_r)
 lon_vals = np.linspace(ang_min, ang_max, n_ang)
@@ -127,7 +129,7 @@ fig.text(
     0.5, 0.03,
     f"Synthetic probe grid: {n_r} radial surfaces ({r_min}\u2013{r_max} AU) "
     f"\u00d7 {n_ang} longitude \u00d7 {n_ang} latitude samples "
-    f"({ang_min}\u00b0 to {ang_max}\u00b0, 2\u00b0 steps)",
+    f"({ang_min}\u00b0 to {ang_max}\u00b0, {steps}\u00b0 steps)",
     color=TEXT_MUTED, fontsize=10.5, ha='center', style='italic'
 )
 
