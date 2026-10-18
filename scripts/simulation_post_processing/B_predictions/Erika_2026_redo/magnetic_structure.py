@@ -18,9 +18,9 @@ from datetime import timedelta, datetime
 # pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 
 # what variation to analyze
-variation = "radial"        # options: "radial", "longitudinal", "latitudinal"
+variation = "latitudinal"        # options: "radial", "longitudinal", "latitudinal"
 radii_lat_lon_analysis = [0.33, 1.0]
-offsets_to_plot = [-30, -20, -10, 0, 10, 20, 30]
+offsets_to_plot = [-20, -10, 0, 10, 20]
 
 # Boltzmann constant in J/K, and mu_0 in H/m
 k_B = 1.380649e-23 
@@ -160,7 +160,7 @@ def _read_probe_axes(h5, probe_count):
 def _nearest_axis_index(axis, requested):
     return int(np.nanargmin(np.abs(axis.astype(float) - requested)))
 
-# This function is only for CMEs:
+# This function is only for CMEs
 def radius_fraction_to_au(radius_fraction):
     """Convert the stored radial coordinate to the physical AU coordinate."""
     simulation_inner_radius_au = 0.33
@@ -273,7 +273,7 @@ if __name__ == "__main__":
             axs[3].plot(probe_data["time"], probe_data["density"])
             axs[4].plot(probe_data["time"], probe_data["T"])
             axs[5].plot(probe_data["time"], probe_data["plasma_beta"])
-            axs[5].set_ylim(top=15, bottom = 0)
+            axs[5].set_yscale('log')
 
             # set the labels and legends
             axs[0].set_ylabel("|B| [nT]", fontsize=16)
@@ -301,16 +301,17 @@ if __name__ == "__main__":
             fig.savefig(f"Radial_evolution/Radial_evolution_{name}.png", dpi=300)
             plt.close(fig)
 
-
     ########## THE LONGITUDINAL VARIATIONS PLOTS ##########
     if variation == "longitudinal":
         # the radial loop
         for r in radii_lat_lon_analysis:
             radius_au = radius_fraction_to_au(r)
-            fig, axs = plt.subplots(len(offsets_to_plot), 1, figsize=(10, 14))
-            fig2, axs2 = plt.subplots(len(offsets_to_plot), 1, figsize=(10, 14))
-            fig.suptitle("|B| ($nT$)", fontsize=24, fontweight="bold")
-            fig2.suptitle("B_RTN ($nT$)", fontsize=24, fontweight="bold")
+            name = f"r_{radius_au:.2f}_AU"
+            # Each radius needs fresh axes so curves cannot carry over.
+            fig, axs = plt.subplots(len(offsets_to_plot) + 1, 1, figsize=(10, 14), sharex=True)
+            fig2, axs2 = plt.subplots(len(offsets_to_plot) + 1, 1, figsize=(10, 14), sharex=True)
+            fig.suptitle(f"|B| (nT), r = {radius_au:.2f} AU", fontsize=24, fontweight="bold")
+            fig2.suptitle(f"B_RTN (nT), r = {radius_au:.2f} AU", fontsize=24, fontweight="bold")
 
             for i in range(len(offsets_to_plot)):
                 # get longitude to plot
@@ -335,17 +336,14 @@ if __name__ == "__main__":
                     (-pl.col("Bz") / 10.0).alias("Bz"),
                 ])
 
-                # calculate |B| and |V|
+                # calculate |B|
                 probe_data = probe_data.with_columns([
                     (probe_data["Bx"]**2 + probe_data["By"]**2 + probe_data["Bz"]**2).sqrt().alias("|B|")
                 ])
 
                 # plot |B|, B_RTN at longitudes
                 # different subplots correspond to different longitudes
-                label = f"r = {radius_au:.2f} AU, lon = {lon} deg"
-                name = f"r_{radius_au:.2f}_AU"
-
-                # on axs[0] and axs2[0], plot the |B| and B_RTN components respectively
+                # Use one magnetic-field panel per longitude.
                 axs[i].plot(probe_data["time"], probe_data["|B|"])
                 axs2[i].plot(probe_data["time"], probe_data["Bx"], label=f"BR")
                 axs2[i].plot(probe_data["time"], probe_data["By"], label=f"BT")
@@ -353,30 +351,43 @@ if __name__ == "__main__":
                 axs[i].set_ylabel(rf"lon = ${lon}^\circ$", fontsize=16)
                 axs2[i].set_ylabel(rf"lon = ${lon}^\circ$", fontsize=16)
 
-                for ax, ax2 in zip(axs.flat, axs2.flat):
-                    ax.grid()
-                    ax2.grid()
-                
                 if i == 0:
                     axs2[i].legend()
 
-                # lets do tight layout
-                fig.tight_layout()
-                fig2.tight_layout()
+                # Compare beta at every longitude in the final panel.
+                probe_data = plasma_beta(probe_data)
+                for beta_ax in (axs[-1], axs2[-1]):
+                    beta_ax.plot(
+                        probe_data["time"], probe_data["plasma_beta"],
+                        label=rf"${lon}^\circ$",
+                    )
+
+            for axes in (axs, axs2):
+                for ax in axes:
+                    ax.grid()
+                axes[-1].set_ylabel(r"Plasma $\beta$", fontsize=16)
+                axes[-1].set_xlabel("Time", fontsize=16)
+                axes[-1].legend(title="Longitude", ncol=len(offsets_to_plot))
+                axes[-1].set_yscale('log')
+            fig.tight_layout()
+            fig2.tight_layout()
 
             # save the figure outside the loop
             fig.savefig(f"Longitudinal_variation/Longitudinal_variations_B_{name}.png", dpi=300)
             fig2.savefig(f"Longitudinal_variation/Longitudinal_variations_BRTN_{name}.png", dpi=300)
+            plt.close(fig)
+            plt.close(fig2)
 
     ########## THE LATITUDINAL VARIATION PLOTS ##########
     if variation == "latitudinal":
         # the radial loop
         for r in radii_lat_lon_analysis:
             radius_au = radius_fraction_to_au(r)
-            fig, axs = plt.subplots(len(offsets_to_plot), 1, figsize=(12, 14))
-            fig2, axs2 = plt.subplots(len(offsets_to_plot), 1, figsize=(12, 14))
-            fig.suptitle("|B| ($nT$)", fontsize=24, fontweight="bold")
-            fig2.suptitle("B_RTN ($nT$)", fontsize=24, fontweight="bold")
+            name = f"r_{radius_au:.2f}_AU"
+            fig, axs = plt.subplots(len(offsets_to_plot) + 1, 1, figsize=(10, 14), sharex=True)
+            fig2, axs2 = plt.subplots(len(offsets_to_plot) + 1, 1, figsize=(10, 14), sharex=True)
+            fig.suptitle(f"|B| (nT), r = {radius_au:.2f} AU", fontsize=24, fontweight="bold")
+            fig2.suptitle(f"B_RTN (nT), r = {radius_au:.2f} AU", fontsize=24, fontweight="bold")
 
             for i in range(len(offsets_to_plot)):
                 # get latitude to plot
@@ -401,17 +412,14 @@ if __name__ == "__main__":
                     (-pl.col("Bz") / 10.0).alias("Bz"),
                 ])
 
-                # calculate |B| and |V|
+                # calculate |B|
                 probe_data = probe_data.with_columns([
                     (probe_data["Bx"]**2 + probe_data["By"]**2 + probe_data["Bz"]**2).sqrt().alias("|B|")
                 ])
 
                 # plot |B|, B_RTN at latitudes
                 # different subplots correspond to different latitudes
-                label = f"r = {radius_au:.2f} AU, lat = {lat} deg"
-                name = f"r_{radius_au:.2f}_AU"
-
-                # on axs[0] and axs2[0], plot the |B| and B_RTN components respectively
+                # Use one magnetic-field panel per latitude.
                 axs[i].plot(probe_data["time"], probe_data["|B|"])
                 axs2[i].plot(probe_data["time"], probe_data["Bx"], label=f"BR")
                 axs2[i].plot(probe_data["time"], probe_data["By"], label=f"BT")
@@ -419,17 +427,29 @@ if __name__ == "__main__":
                 axs[i].set_ylabel(rf"lat = ${lat}^\circ$", fontsize=16)
                 axs2[i].set_ylabel(rf"lat = ${lat}^\circ$", fontsize=16)
 
-                for ax, ax2 in zip(axs.flat, axs2.flat):
-                    ax.grid()
-                    ax2.grid()
-
                 if i == 0:
                     axs2[i].legend()
 
-                # lets do tight layout
-                fig.tight_layout()
-                fig2.tight_layout()
+                # Compare beta at every latitude in the final panel.
+                probe_data = plasma_beta(probe_data)
+                for beta_ax in (axs[-1], axs2[-1]):
+                    beta_ax.plot(
+                        probe_data["time"], probe_data["plasma_beta"],
+                        label=rf"${lat}^\circ$",
+                    )
+
+            for axes in (axs, axs2):
+                for ax in axes:
+                    ax.grid()
+                axes[-1].set_ylabel(r"Plasma $\beta$", fontsize=16)
+                axes[-1].set_xlabel("Time", fontsize=16)
+                axes[-1].legend(title="Latitude", ncol=len(offsets_to_plot))
+                axes[-1].set_yscale('log')
+            fig.tight_layout()
+            fig2.tight_layout()
 
             # save the figure outside the loop
             fig.savefig(f"Latitudinal_variation/Latitudinal_variations_B_{name}.png", dpi=300)
             fig2.savefig(f"Latitudinal_variation/Latitudinal_variations_BRTN_{name}.png", dpi=300)
+            plt.close(fig)
+            plt.close(fig2)
