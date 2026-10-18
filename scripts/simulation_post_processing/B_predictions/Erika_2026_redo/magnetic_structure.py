@@ -7,9 +7,12 @@
 import numpy as np
 import h5py
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from matplotlib.patches import Patch
 import polars as pl
 import pandas as pd
 import sys
+from pathlib import Path
 from datetime import timedelta, datetime
 
 ########## Settings ##########
@@ -18,9 +21,10 @@ from datetime import timedelta, datetime
 # pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 
 # what variation to analyze
-variation = "latitudinal"        # options: "radial", "longitudinal", "latitudinal"
+variation = "radial"        # options: "radial", "longitudinal", "latitudinal"
 radii_lat_lon_analysis = [0.33, 1.0]
 offsets_to_plot = [-20, -10, 0, 10, 20]
+beta_threshold = 0.75        # Pink below this value; gray at or above it.
 
 # Boltzmann constant in J/K, and mu_0 in H/m
 k_B = 1.380649e-23 
@@ -160,7 +164,6 @@ def _read_probe_axes(h5, probe_count):
 def _nearest_axis_index(axis, requested):
     return int(np.nanargmin(np.abs(axis.astype(float) - requested)))
 
-# This function is only for CMEs
 def radius_fraction_to_au(radius_fraction):
     """Convert the stored radial coordinate to the physical AU coordinate."""
     simulation_inner_radius_au = 0.33
@@ -221,6 +224,16 @@ if __name__ == "__main__":
     # the file path
     hdf5_filepath = "/Users/syedraza/cmeuncerpy/Data/probe_cone/cme_probes_172.h5"
 
+    # Resolve output paths beside this script, regardless of the launch directory.
+    output_folders = {
+        "radial": "Radial_evolution",
+        "longitudinal": "Longitudinal_variation",
+        "latitudinal": "Latitudinal_variation",
+    }
+    output_dir = Path(__file__).resolve().parent / output_folders[variation]
+    output_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Saving figures to {output_dir}")
+
     ########## THE RADIAL EVOLUTION PLOTS ##########
 
     if variation == "radial":
@@ -262,18 +275,35 @@ if __name__ == "__main__":
             # calculate plasma beta
             probe_data = plasma_beta(probe_data)
 
-            # plot |B|, B_xyz, |V|, N, T
+            time = mdates.date2num(probe_data["time"].to_list())
+            beta = probe_data["plasma_beta"].to_numpy()
+
+            # Shade full-height time intervals on every panel. Each interval
+            # uses its starting beta; missing beta leaves the background clear.
+            valid = np.isfinite(beta[:-1]) & np.isfinite(beta[1:])
+            for mask, color in ((valid & (beta[:-1] < beta_threshold), "pink"),
+                                (valid & (beta[:-1] >= beta_threshold), "gray")):
+                # Merge adjacent intervals to avoid visible seams.
+                edges = np.diff(np.r_[False, mask, False].astype(int))
+                for start, end in zip(np.flatnonzero(edges == 1),
+                                      np.flatnonzero(edges == -1)):
+                    for ax in axs:
+                        ax.axvspan(time[start], time[end], color=color,
+                                   alpha=0.25, linewidth=0, zorder=0)
+
             label = f"r = {radius_au:.2f} AU"
             name = f"r_{radius_au:.2f}_AU"
             axs[0].plot(probe_data["time"], probe_data["|B|"])
-            axs[1].plot(probe_data["time"], probe_data["Bx"], label=f"BR")
-            axs[1].plot(probe_data["time"], probe_data["By"], label=f"BT")
-            axs[1].plot(probe_data["time"], probe_data["Bz"], label=f"BN")
-            axs[2].plot(probe_data["time"], probe_data["|V|"])
-            axs[3].plot(probe_data["time"], probe_data["density"])
-            axs[4].plot(probe_data["time"], probe_data["T"])
-            axs[5].plot(probe_data["time"], probe_data["plasma_beta"])
+            for field, component in (("Bx", "BR"), ("By", "BT"), ("Bz", "BN")):
+                axs[1].plot(probe_data["time"], probe_data[field], label=component)
+            for ax, field in zip(axs[2:], ("|V|", "density", "T", "plasma_beta")):
+                ax.plot(probe_data["time"], probe_data[field])
             axs[5].set_yscale('log')
+            axs[5].axhline(beta_threshold, color="gray", linewidth=0.8, linestyle="--")
+            axs[0].legend(handles=[
+                Patch(facecolor="pink", alpha=0.25, label=rf"$\beta < {beta_threshold:g}$"),
+                Patch(facecolor="gray", alpha=0.25, label=rf"$\beta \geq {beta_threshold:g}$"),
+            ])
 
             # set the labels and legends
             axs[0].set_ylabel("|B| [nT]", fontsize=16)
@@ -298,7 +328,7 @@ if __name__ == "__main__":
 
             # save the figure
             fig.tight_layout()
-            fig.savefig(f"Radial_evolution/Radial_evolution_{name}.png", dpi=300)
+            fig.savefig(output_dir / f"Radial_evolution_{name}.png", dpi=300)
             plt.close(fig)
 
     ########## THE LONGITUDINAL VARIATIONS PLOTS ##########
@@ -373,8 +403,8 @@ if __name__ == "__main__":
             fig2.tight_layout()
 
             # save the figure outside the loop
-            fig.savefig(f"Longitudinal_variation/Longitudinal_variations_B_{name}.png", dpi=300)
-            fig2.savefig(f"Longitudinal_variation/Longitudinal_variations_BRTN_{name}.png", dpi=300)
+            fig.savefig(output_dir / f"Longitudinal_variations_B_{name}.png", dpi=300)
+            fig2.savefig(output_dir / f"Longitudinal_variations_BRTN_{name}.png", dpi=300)
             plt.close(fig)
             plt.close(fig2)
 
@@ -449,7 +479,7 @@ if __name__ == "__main__":
             fig2.tight_layout()
 
             # save the figure outside the loop
-            fig.savefig(f"Latitudinal_variation/Latitudinal_variations_B_{name}.png", dpi=300)
-            fig2.savefig(f"Latitudinal_variation/Latitudinal_variations_BRTN_{name}.png", dpi=300)
+            fig.savefig(output_dir / f"Latitudinal_variations_B_{name}.png", dpi=300)
+            fig2.savefig(output_dir / f"Latitudinal_variations_BRTN_{name}.png", dpi=300)
             plt.close(fig)
             plt.close(fig2)
