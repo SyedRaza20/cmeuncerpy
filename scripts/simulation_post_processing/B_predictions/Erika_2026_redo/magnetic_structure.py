@@ -21,13 +21,13 @@ from datetime import timedelta, datetime
 # pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 
 # what variation to analyze
-variation = "radial"        # options: "radial", "longitudinal", "latitudinal"
+variation = "longitudinal"        # options: "radial", "longitudinal", "latitudinal"
 radii_lat_lon_analysis = [0.33, 1.0]
 offsets_to_plot = [-20, -10, 0, 10, 20]
-beta_threshold = 0.75        # Pink below this value; gray at or above it.
+beta_threshold = 0.65
 
 # Boltzmann constant in J/K, and mu_0 in H/m
-k_B = 1.380649e-23 
+k_B = 1.380649e-23
 mu_0 = 1.256637e-6
 
 ########## Helper functions ##########
@@ -165,7 +165,7 @@ def _nearest_axis_index(axis, requested):
     return int(np.nanargmin(np.abs(axis.astype(float) - requested)))
 
 def radius_fraction_to_au(radius_fraction):
-    """Convert the stored radial coordinate to the physical AU coordinate."""
+    """Convert the stored radial coordinate to the physical AU coordinate. Only used for CMEs"""
     simulation_inner_radius_au = 0.33
     simulation_outer_radius_au = 1.25
     stored_inner_radius = 0.33
@@ -192,6 +192,45 @@ def convert_partial_year(number):
     day_one = datetime(year,1,1)
     date = d + day_one
     return date
+
+def longest_low_beta_interval(time, beta, threshold):
+    """Return inclusive indices of the longest continuous low-beta run.
+
+    Non-finite beta breaks a run. Equal durations select the first run;
+    no qualifying samples returns None.
+    """
+    best = None
+    start = None
+    for i, value in enumerate(beta):
+        if np.isfinite(value) and value < threshold:
+            if start is None:
+                start = i
+            if best is None or time[i] - time[start] > time[best[1]] - time[best[0]]:
+                best = (start, i)
+        else:
+            start = None
+    return best
+
+def shade_mc_region(axes, probe_data):
+    """Shade this probe's longest low-beta interval pink, all other time gray."""
+    time = mdates.date2num(probe_data["time"].to_list())
+    if len(time) < 2:
+        return
+    beta = probe_data["plasma_beta"].to_numpy()
+    interval = longest_low_beta_interval(time, beta, beta_threshold)
+    spans = [(time[0], time[-1], "gray")]
+    if interval is not None:
+        start, end = interval
+        spans = [
+            (time[0], time[start], "gray"),
+            (time[start], time[end], "pink"),
+            (time[end], time[-1], "gray"),
+        ]
+    for left, right, color in spans:
+        if right > left:
+            for ax in axes:
+                ax.axvspan(left, right, color=color,
+                           alpha=0.25, linewidth=0, zorder=0)
 
 def plasma_beta(probe_data):
     """
@@ -237,9 +276,8 @@ if __name__ == "__main__":
     ########## THE RADIAL EVOLUTION PLOTS ##########
 
     if variation == "radial":
-
-        # Fill the subplots using five radial probe locations.
-        # with |B|, B_RTN (one subplot for all three components), |V|, density (N), temperature (T) 
+        # Fill the subplots using five radial probe locations. Parameters to plot are:
+        # |B|, B_RTN (one subplot for all three components), |V|, density (N), temperature (T) 
         radii_to_plot = np.linspace(0.33, 1.0, 5)
         for r in radii_to_plot:
             radius_au = radius_fraction_to_au(r)
@@ -278,18 +316,24 @@ if __name__ == "__main__":
             time = mdates.date2num(probe_data["time"].to_list())
             beta = probe_data["plasma_beta"].to_numpy()
 
-            # Shade full-height time intervals on every panel. Each interval
-            # uses its starting beta; missing beta leaves the background clear.
-            valid = np.isfinite(beta[:-1]) & np.isfinite(beta[1:])
-            for mask, color in ((valid & (beta[:-1] < beta_threshold), "pink"),
-                                (valid & (beta[:-1] >= beta_threshold), "gray")):
-                # Merge adjacent intervals to avoid visible seams.
-                edges = np.diff(np.r_[False, mask, False].astype(int))
-                for start, end in zip(np.flatnonzero(edges == 1),
-                                      np.flatnonzero(edges == -1)):
-                    for ax in axs:
-                        ax.axvspan(time[start], time[end], color=color,
-                                   alpha=0.25, linewidth=0, zorder=0)
+            # Find the longest continuous interval below the threshold.
+            largest_indices = longest_low_beta_interval(time, beta, beta_threshold)
+
+            # Shade only that interval pink; all remaining time is gray.
+            if len(time) > 1:
+                spans = [(time[0], time[-1], "gray")]
+                if largest_indices is not None:
+                    start, end = largest_indices
+                    spans = [
+                        (time[0], time[start], "gray"),
+                        (time[start], time[end], "pink"),
+                        (time[end], time[-1], "gray"),
+                    ]
+                for left, right, color in spans:
+                    if right > left:
+                        for ax in axs:
+                            ax.axvspan(left, right, color=color,
+                                       alpha=0.25, linewidth=0, zorder=0)
 
             label = f"r = {radius_au:.2f} AU"
             name = f"r_{radius_au:.2f}_AU"
@@ -301,8 +345,8 @@ if __name__ == "__main__":
             axs[5].set_yscale('log')
             axs[5].axhline(beta_threshold, color="gray", linewidth=0.8, linestyle="--")
             axs[0].legend(handles=[
-                Patch(facecolor="pink", alpha=0.25, label=rf"$\beta < {beta_threshold:g}$"),
-                Patch(facecolor="gray", alpha=0.25, label=rf"$\beta \geq {beta_threshold:g}$"),
+                Patch(facecolor="pink", alpha=0.25, label=rf"MC: longest interval of $\beta < {beta_threshold:g}$"),
+                Patch(facecolor="gray", alpha=0.25, label="Non MC region"),
             ])
 
             # set the labels and legends
@@ -371,6 +415,9 @@ if __name__ == "__main__":
                     (probe_data["Bx"]**2 + probe_data["By"]**2 + probe_data["Bz"]**2).sqrt().alias("|B|")
                 ])
 
+                probe_data = plasma_beta(probe_data)
+                shade_mc_region((axs[i], axs2[i]), probe_data)
+
                 # plot |B|, B_RTN at longitudes
                 # different subplots correspond to different longitudes
                 # Use one magnetic-field panel per longitude.
@@ -385,7 +432,6 @@ if __name__ == "__main__":
                     axs2[i].legend()
 
                 # Compare beta at every longitude in the final panel.
-                probe_data = plasma_beta(probe_data)
                 for beta_ax in (axs[-1], axs2[-1]):
                     beta_ax.plot(
                         probe_data["time"], probe_data["plasma_beta"],
@@ -399,8 +445,14 @@ if __name__ == "__main__":
                 axes[-1].set_xlabel("Time", fontsize=16)
                 axes[-1].legend(title="Longitude", ncol=len(offsets_to_plot))
                 axes[-1].set_yscale('log')
-            fig.tight_layout()
-            fig2.tight_layout()
+                axes[-1].axhline(beta_threshold, color="gray", linewidth=0.8, linestyle="--")
+            for figure in (fig, fig2):
+                figure.legend(handles=[
+                    Patch(facecolor="pink", alpha=0.25,
+                          label=rf"MC: longest interval of $\beta < {beta_threshold:g}$"),
+                    Patch(facecolor="gray", alpha=0.25, label="Non MC region"),
+                ], loc="lower center", ncol=2)
+                figure.tight_layout(rect=(0, 0.035, 1, 1))
 
             # save the figure outside the loop
             fig.savefig(output_dir / f"Longitudinal_variations_B_{name}.png", dpi=300)
@@ -447,6 +499,9 @@ if __name__ == "__main__":
                     (probe_data["Bx"]**2 + probe_data["By"]**2 + probe_data["Bz"]**2).sqrt().alias("|B|")
                 ])
 
+                probe_data = plasma_beta(probe_data)
+                shade_mc_region((axs[i], axs2[i]), probe_data)
+
                 # plot |B|, B_RTN at latitudes
                 # different subplots correspond to different latitudes
                 # Use one magnetic-field panel per latitude.
@@ -461,7 +516,6 @@ if __name__ == "__main__":
                     axs2[i].legend()
 
                 # Compare beta at every latitude in the final panel.
-                probe_data = plasma_beta(probe_data)
                 for beta_ax in (axs[-1], axs2[-1]):
                     beta_ax.plot(
                         probe_data["time"], probe_data["plasma_beta"],
@@ -475,8 +529,14 @@ if __name__ == "__main__":
                 axes[-1].set_xlabel("Time", fontsize=16)
                 axes[-1].legend(title="Latitude", ncol=len(offsets_to_plot))
                 axes[-1].set_yscale('log')
-            fig.tight_layout()
-            fig2.tight_layout()
+                axes[-1].axhline(beta_threshold, color="gray", linewidth=0.8, linestyle="--")
+            for figure in (fig, fig2):
+                figure.legend(handles=[
+                    Patch(facecolor="pink", alpha=0.25,
+                          label=rf"MC: longest interval with $\beta < {beta_threshold:g}$"),
+                    Patch(facecolor="gray", alpha=0.25, label="Non MC region"),
+                ], loc="lower center", ncol=2)
+                figure.tight_layout(rect=(0, 0.035, 1, 1))
 
             # save the figure outside the loop
             fig.savefig(output_dir / f"Latitudinal_variations_B_{name}.png", dpi=300)
