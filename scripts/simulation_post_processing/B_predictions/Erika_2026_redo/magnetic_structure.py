@@ -21,7 +21,7 @@ from datetime import timedelta, datetime
 # pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 
 # what variation to analyze
-variation = "longitudinal"        # options: "radial", "longitudinal", "latitudinal"
+variation = "latitudinal"     # options: "radial", "longitudinal", "latitudinal"
 radii_lat_lon_analysis = [0.33, 1.0]
 offsets_to_plot = [-20, -10, 0, 10, 20]
 beta_threshold = 0.65
@@ -346,8 +346,9 @@ if __name__ == "__main__":
             axs[5].axhline(beta_threshold, color="gray", linewidth=0.8, linestyle="--")
             axs[0].legend(handles=[
                 Patch(facecolor="pink", alpha=0.25, label=rf"MC: longest interval of $\beta < {beta_threshold:g}$"),
-                Patch(facecolor="gray", alpha=0.25, label="Non MC region"),
-            ])
+                Patch(facecolor="gray", alpha=0.25, label="Non MC region"),],
+                fontsize=14
+            )
 
             # set the labels and legends
             axs[0].set_ylabel("|B| [nT]", fontsize=16)
@@ -451,7 +452,7 @@ if __name__ == "__main__":
                     Patch(facecolor="pink", alpha=0.25,
                           label=rf"MC: longest interval of $\beta < {beta_threshold:g}$"),
                     Patch(facecolor="gray", alpha=0.25, label="Non MC region"),
-                ], loc="lower center", ncol=2)
+                ], loc="lower center", ncol=2, fontsize=16)
                 figure.tight_layout(rect=(0, 0.035, 1, 1))
 
             # save the figure outside the loop
@@ -535,7 +536,7 @@ if __name__ == "__main__":
                     Patch(facecolor="pink", alpha=0.25,
                           label=rf"MC: longest interval with $\beta < {beta_threshold:g}$"),
                     Patch(facecolor="gray", alpha=0.25, label="Non MC region"),
-                ], loc="lower center", ncol=2)
+                ], loc="lower center", ncol=2, fontsize=16)
                 figure.tight_layout(rect=(0, 0.035, 1, 1))
 
             # save the figure outside the loop
