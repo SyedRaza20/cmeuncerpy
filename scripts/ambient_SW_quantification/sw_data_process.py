@@ -55,7 +55,6 @@ def clean_donki(file_path):
     # return the resulting data set. This is the cleaned donki data set
     return clean_data
 
-
 def plot_cme_transit(data, title, color, figname):
     """
     Plot a histogram of CME transit times using data from a specified column in a DataFrame.
@@ -118,7 +117,6 @@ def plot_cme_transit(data, title, color, figname):
     # return None
     return None
 
-
 def clean_omni_data(file_path):
     """
     Cleans OMNI solar wind data from a specified file.
@@ -168,7 +166,6 @@ def clean_omni_data(file_path):
     sw_ob.reset_index(drop=True, inplace=True)
 
     return sw_ob
-
 
 # Function for processing observed parameters:
 def process_observed_parameters(sw_ob, cme_data):

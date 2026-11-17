@@ -10,8 +10,6 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.patches import Patch
 import polars as pl
-import pandas as pd
-import sys
 from pathlib import Path
 from datetime import timedelta, datetime
 
@@ -21,10 +19,10 @@ from datetime import timedelta, datetime
 # pl.Config.set_tbl_rows(-1)      # polars settings to show all the rows
 
 # what variation to analyze
-variation = "latitudinal"     # options: "radial", "longitudinal", "latitudinal"
-radii_lat_lon_analysis = [0.33, 1.0]
+variation = "radial"     # options: "radial", "longitudinal", "latitudinal"
+radii_lat_lon_analysis = [0.33, 1.0]     # radial extent of the cone
 offsets_to_plot = [-20, -10, 0, 10, 20]
-beta_threshold = 0.65
+beta_threshold = 0.70   # can I make it distance dependent?
 
 # Boltzmann constant in J/K, and mu_0 in H/m
 k_B = 1.380649e-23
@@ -57,7 +55,8 @@ def get_probe_time_series(
     polars.DataFrame
         One row per time record. The columns are ``time``, all fields named
         by ``/field_name``, ``distance_au``, ``longitude_deg``,
-        and ``latitude_deg``.
+        and ``latitude_deg``. Pressure ``P`` is returned in Pa and RTN
+        magnetic components in nT, converted using ``/field_units``.
 
     Notes
     -----
@@ -78,6 +77,18 @@ def get_probe_time_series(
         positions = np.asarray(h5["position"])
         found = np.asarray(h5["found"], dtype=bool)
         field_names = _decode_hdf5_strings(h5["field_name"])
+        field_units = (
+            _decode_hdf5_strings(h5["field_units"])
+            if "field_units" in h5 else None
+        )
+        if field_units is not None and len(field_units) != len(field_names):
+            raise ValueError("field_units and field_name disagree")
+        if any(name in field_names for name in ("BR", "BT", "BN")):
+            basis = h5.attrs.get("vector_basis", "")
+            if isinstance(basis, bytes):
+                basis = basis.decode("utf-8")
+            if basis != "RTN":
+                raise ValueError("Expected stored BR/BT/BN in the RTN basis")
 
         if time.ndim != 1 or values.ndim != 3 or positions.ndim != 3:
             raise ValueError("time, values, and position have unexpected dimensions")
@@ -123,10 +134,25 @@ def get_probe_time_series(
         ))
 
         data = {"time": time}
+        unit_scales = {
+            "P": {"picodyne/cm^2": 1e-13, "Pa": 1.0},
+            "BR": {"microgauss": 0.1, "nT": 1.0},
+            "BT": {"microgauss": 0.1, "nT": 1.0},
+            "BN": {"microgauss": 0.1, "nT": 1.0},
+            "number_density": {"cm^-3": 1.0},
+        }
         for field_index, field_name in enumerate(field_names):
             if field_name in data:
                 raise ValueError("duplicate field name {!r}".format(field_name))
-            data[field_name] = values[:, probe_index, field_index]
+            scale = 1.0
+            if field_name in unit_scales:
+                unit = field_units[field_index] if field_units is not None else None
+                if unit not in unit_scales[field_name]:
+                    raise ValueError(f"Missing or unsupported unit {unit!r} for {field_name}")
+                scale = unit_scales[field_name][unit]
+            data[field_name] = np.where(
+                found[:, probe_index], values[:, probe_index, field_index] * scale, np.nan
+            )
 
         for position_index, name in enumerate(
             ("distance_au", "longitude_deg", "latitude_deg")
@@ -164,17 +190,23 @@ def _read_probe_axes(h5, probe_count):
 def _nearest_axis_index(axis, requested):
     return int(np.nanargmin(np.abs(axis.astype(float) - requested)))
 
-def radius_fraction_to_au(radius_fraction):
-    """Convert the stored radial coordinate to the physical AU coordinate. Only used for CMEs"""
-    simulation_inner_radius_au = 0.33
-    simulation_outer_radius_au = 1.25
-    stored_inner_radius = 0.33
-    stored_outer_radius = 1.0
-    return simulation_inner_radius_au + (
-        (radius_fraction - stored_inner_radius)
-        * (simulation_outer_radius_au - simulation_inner_radius_au)
-        / (stored_outer_radius - stored_inner_radius)
-    )
+def radius_fraction_to_au(radius_fraction, hdf5_path):
+    """Read the first available physical distance for this stored radius.
+
+    CME probes have fixed radii. The axis coordinate alone does not specify
+    the physical distance consistently across simulation formats.
+    """
+    with h5py.File(hdf5_path, "r") as h5:
+        axes = _read_probe_axes(h5, h5["values"].shape[1])
+        radial_index = _nearest_axis_index(axes[0], radius_fraction)
+        angular_count = axes[1].size * axes[2].size
+        start = radial_index * angular_count
+        found = np.asarray(h5["found"][:, start:start + angular_count], dtype=bool)
+        records, probes = np.nonzero(found)
+        if records.size:
+            return float(h5["position"][records[0], start + probes[0], 0])
+    print(f"Skipping radius fraction {radius_fraction:g}: no valid probe samples.")
+    return None
 
 def is_leap(Year):  
     # Checking if the given year is leap year  
@@ -246,13 +278,22 @@ def plasma_beta(probe_data):
         The probe data with an additional column called plasma_beta
     """
 
-    # Calculate beta = thermal pressure / magnetic pressure.
-    # Density is converted from cm^-3 to m^-3 and |B| from nT to T.
-    probe_data = probe_data.with_columns(
-        plasma_beta = (
-            (pl.col("density") / (0.01**3) * k_B * pl.col("T"))
-            / ((pl.col("|B|") * 1e-9) ** 2 / (2 * mu_0))
+    # The reader supplies P in Pa, density in cm^-3, and |B| is in nT.
+    density_si = pl.col("number_density") * 1e6
+    if "T" not in probe_data.columns:
+        probe_data = probe_data.with_columns(
+            T=pl.when(density_si > 0)
+            .then(pl.col("P") / (density_si * k_B))
+            .otherwise(float("nan"))
         )
+    thermal_pressure = (
+        pl.col("P") if "P" in probe_data.columns
+        else density_si * k_B * pl.col("T")
+    )
+    probe_data = probe_data.with_columns(
+        plasma_beta=pl.when(pl.col("|B|") > 0)
+        .then(thermal_pressure / ((pl.col("|B|") * 1e-9) ** 2 / (2 * mu_0)))
+        .otherwise(float("nan"))
     )
 
     # return this
@@ -261,7 +302,7 @@ def plasma_beta(probe_data):
 # the main function
 if __name__ == "__main__":
     # the file path
-    hdf5_filepath = "/Users/syedraza/cmeuncerpy/Data/probe_cone/cme_probes_172.h5"
+    hdf5_filepath = "/Users/syedraza/cmeuncerpy/Data/probe_cone/cme_probes_90_30.h5"
 
     # Resolve output paths beside this script, regardless of the launch directory.
     output_folders = {
@@ -277,10 +318,12 @@ if __name__ == "__main__":
 
     if variation == "radial":
         # Fill the subplots using five radial probe locations. Parameters to plot are:
-        # |B|, B_RTN (one subplot for all three components), |V|, density (N), temperature (T) 
+        # |B|, B_RTN (one subplot for all three components), |V|, number_density (N), temperature (T)
         radii_to_plot = np.linspace(0.33, 1.0, 5)
         for r in radii_to_plot:
-            radius_au = radius_fraction_to_au(r)
+            radius_au = radius_fraction_to_au(r, hdf5_filepath)
+            if radius_au is None:
+                continue
             fig, axs = plt.subplots(6, 1, figsize=(11, 10))
             fig.suptitle("Probe Time Series Data", fontsize=24, fontweight="bold")
 
@@ -297,17 +340,10 @@ if __name__ == "__main__":
                 pl.col("time").map_elements(convert_partial_year).alias("time")
             ])
 
-            # fix for the magnetic field components
-            probe_data = probe_data.with_columns([
-                (pl.col("Bx") / 10.0).alias("Bx"),
-                (pl.col("By") / 10.0).alias("By"),
-                (-pl.col("Bz") / 10.0).alias("Bz"),
-            ])
-
             # calculate |B| and |V|
             probe_data = probe_data.with_columns([
-                (probe_data["Bx"]**2 + probe_data["By"]**2 + probe_data["Bz"]**2).sqrt().alias("|B|"),
-                (probe_data["Vx"]**2 + probe_data["Vy"]**2 + probe_data["Vz"]**2).sqrt().alias("|V|"),
+                (probe_data["BR"]**2 + probe_data["BT"]**2 + probe_data["BN"]**2).sqrt().alias("|B|"),
+                (probe_data["VR"]**2 + probe_data["VT"]**2 + probe_data["VN"]**2).sqrt().alias("|V|"),
             ])
 
             # calculate plasma beta
@@ -338,9 +374,9 @@ if __name__ == "__main__":
             label = f"r = {radius_au:.2f} AU"
             name = f"r_{radius_au:.2f}_AU"
             axs[0].plot(probe_data["time"], probe_data["|B|"])
-            for field, component in (("Bx", "BR"), ("By", "BT"), ("Bz", "BN")):
+            for field, component in (("BR", "BR"), ("BT", "BT"), ("BN", "BN")):
                 axs[1].plot(probe_data["time"], probe_data[field], label=component)
-            for ax, field in zip(axs[2:], ("|V|", "density", "T", "plasma_beta")):
+            for ax, field in zip(axs[2:], ("|V|", "number_density", "T", "plasma_beta")):
                 ax.plot(probe_data["time"], probe_data[field])
             axs[5].set_yscale('log')
             axs[5].axhline(beta_threshold, color="gray", linewidth=0.8, linestyle="--")
@@ -380,7 +416,9 @@ if __name__ == "__main__":
     if variation == "longitudinal":
         # the radial loop
         for r in radii_lat_lon_analysis:
-            radius_au = radius_fraction_to_au(r)
+            radius_au = radius_fraction_to_au(r, hdf5_filepath)
+            if radius_au is None:
+                continue
             name = f"r_{radius_au:.2f}_AU"
             # Each radius needs fresh axes so curves cannot carry over.
             fig, axs = plt.subplots(len(offsets_to_plot) + 1, 1, figsize=(10, 14), sharex=True)
@@ -404,16 +442,9 @@ if __name__ == "__main__":
                     pl.col("time").map_elements(convert_partial_year).alias("time")
                 ])
 
-                # fix for the magnetic field components
-                probe_data = probe_data.with_columns([
-                    (pl.col("Bx") / 10.0).alias("Bx"),
-                    (pl.col("By") / 10.0).alias("By"),
-                    (-pl.col("Bz") / 10.0).alias("Bz"),
-                ])
-
                 # calculate |B|
                 probe_data = probe_data.with_columns([
-                    (probe_data["Bx"]**2 + probe_data["By"]**2 + probe_data["Bz"]**2).sqrt().alias("|B|")
+                    (probe_data["BR"]**2 + probe_data["BT"]**2 + probe_data["BN"]**2).sqrt().alias("|B|")
                 ])
 
                 probe_data = plasma_beta(probe_data)
@@ -423,9 +454,9 @@ if __name__ == "__main__":
                 # different subplots correspond to different longitudes
                 # Use one magnetic-field panel per longitude.
                 axs[i].plot(probe_data["time"], probe_data["|B|"])
-                axs2[i].plot(probe_data["time"], probe_data["Bx"], label=f"BR")
-                axs2[i].plot(probe_data["time"], probe_data["By"], label=f"BT")
-                axs2[i].plot(probe_data["time"], probe_data["Bz"], label=f"BN")
+                axs2[i].plot(probe_data["time"], probe_data["BR"], label=f"BR")
+                axs2[i].plot(probe_data["time"], probe_data["BT"], label=f"BT")
+                axs2[i].plot(probe_data["time"], probe_data["BN"], label=f"BN")
                 axs[i].set_ylabel(rf"lon = ${lon}^\circ$", fontsize=16)
                 axs2[i].set_ylabel(rf"lon = ${lon}^\circ$", fontsize=16)
 
@@ -465,7 +496,9 @@ if __name__ == "__main__":
     if variation == "latitudinal":
         # the radial loop
         for r in radii_lat_lon_analysis:
-            radius_au = radius_fraction_to_au(r)
+            radius_au = radius_fraction_to_au(r, hdf5_filepath)
+            if radius_au is None:
+                continue
             name = f"r_{radius_au:.2f}_AU"
             fig, axs = plt.subplots(len(offsets_to_plot) + 1, 1, figsize=(10, 14), sharex=True)
             fig2, axs2 = plt.subplots(len(offsets_to_plot) + 1, 1, figsize=(10, 14), sharex=True)
@@ -488,16 +521,9 @@ if __name__ == "__main__":
                     pl.col("time").map_elements(convert_partial_year).alias("time")
                 ])
 
-                # fix for the magnetic field components
-                probe_data = probe_data.with_columns([
-                    (pl.col("Bx") / 10.0).alias("Bx"),
-                    (pl.col("By") / 10.0).alias("By"),
-                    (-pl.col("Bz") / 10.0).alias("Bz"),
-                ])
-
                 # calculate |B|
                 probe_data = probe_data.with_columns([
-                    (probe_data["Bx"]**2 + probe_data["By"]**2 + probe_data["Bz"]**2).sqrt().alias("|B|")
+                    (probe_data["BR"]**2 + probe_data["BT"]**2 + probe_data["BN"]**2).sqrt().alias("|B|")
                 ])
 
                 probe_data = plasma_beta(probe_data)
@@ -507,9 +533,9 @@ if __name__ == "__main__":
                 # different subplots correspond to different latitudes
                 # Use one magnetic-field panel per latitude.
                 axs[i].plot(probe_data["time"], probe_data["|B|"])
-                axs2[i].plot(probe_data["time"], probe_data["Bx"], label=f"BR")
-                axs2[i].plot(probe_data["time"], probe_data["By"], label=f"BT")
-                axs2[i].plot(probe_data["time"], probe_data["Bz"], label=f"BN")
+                axs2[i].plot(probe_data["time"], probe_data["BR"], label=f"BR")
+                axs2[i].plot(probe_data["time"], probe_data["BT"], label=f"BT")
+                axs2[i].plot(probe_data["time"], probe_data["BN"], label=f"BN")
                 axs[i].set_ylabel(rf"lat = ${lat}^\circ$", fontsize=16)
                 axs2[i].set_ylabel(rf"lat = ${lat}^\circ$", fontsize=16)
 
@@ -544,3 +570,6 @@ if __name__ == "__main__":
             fig2.savefig(output_dir / f"Latitudinal_variations_BRTN_{name}.png", dpi=300)
             plt.close(fig)
             plt.close(fig2)
+
+
+######################################### THE END ######################################### 
